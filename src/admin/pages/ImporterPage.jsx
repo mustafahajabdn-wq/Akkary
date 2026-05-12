@@ -166,7 +166,13 @@ const CATEGORY_FIELDS = {
   }
 };
 const REQUIRED = ["title", "category", "city", "type", "phone"];
-const IMPORT_META_FIELDS = new Set(["import_key", "image_files"]);
+// حقول لا تُحفَظ في جدول listings ولا تُرحَّل إلى extra_fields.
+// import_key و image_files للربط أثناء استيراد ZIP فقط.
+// whatsapp و whatsapp2 حُذفا من قاعدة البيانات، لذلك نتجاهلهما إذا وردا في ملف قديم.
+const IMPORT_META_FIELDS = new Set(["import_key", "image_files", "whatsapp", "whatsapp2"]);
+
+// حقول مباشرة في جدول listings وقد لا تظهر أحيانًا في جلب أعمدة القاعدة، لذلك نضمن عدم ترحيلها إلى extra_fields.
+const DIRECT_IMPORT_DB_COLUMNS = new Set(["phone2"]);
 const LISTING_IMAGES_BUCKET = "listing-images";
 const SAFE_STORAGE_PATH = /^[\w./-]+$/;
 const SCHEDULE_MODE_OPTIONS = [
@@ -280,7 +286,6 @@ const JSON_TEMPLATE = JSON.stringify({
   district: null,
   village: null,
   phone2: null,
-  whatsapp: false,
   created_at: null,
   status: "active",
   admin_status: "approved",
@@ -358,13 +363,15 @@ function buildInsert(l, dbCols = new Set()) {
     return null;
   };
 
+  const effectiveDbCols = new Set([...dbCols, ...DIRECT_IMPORT_DB_COLUMNS]);
+
   // ما ليس له عمود في DB → extra_fields، مع استثناء حقول الربط الخاصة بالاستيراد.
   const explicitExtraFields = parseExtraFieldsValue(l.extra_fields);
   const unknownExtraFields = Object.fromEntries(
     Object.entries(l).filter(([k, v]) =>
       k !== "extra_fields" &&
       !IMPORT_META_FIELDS.has(k) &&
-      !dbCols.has(k) &&
+      !effectiveDbCols.has(k) &&
       v !== null &&
       v !== undefined &&
       v !== ""
@@ -373,12 +380,12 @@ function buildInsert(l, dbCols = new Set()) {
   const extraFields = { ...explicitExtraFields, ...unknownExtraFields };
 
   // بناء الـ insert ديناميكياً من أعمدة DB
-  const BOOL_FIELDS = new Set(["heating", "kitchen", "elevator", "parking", "compound", "pool", "solar", "truck_access", "whatsapp"]);
+  const BOOL_FIELDS = new Set(["heating", "kitchen", "elevator", "parking", "compound", "pool", "solar", "truck_access"]);
   const INT_FIELDS = new Set(["rooms", "baths", "floor", "total_floors", "total_units", "balconies", "light_score", "salle", "beds"]);
   const FLOAT_FIELDS = new Set(["price", "total_area", "net_area", "land_area", "build_area", "facade", "ceil_height", "lat", "lng", "map_lat", "map_lng"]);
   const SKIP_INSERT = new Set(["id", "user_id", "views", "whatsapp_clicks", "phone_clicks", "content_hash", "content_flag", "content_score", "sort_order", "qa_enabled", "area"]);
   const row = {};
-  for (const col of dbCols) {
+  for (const col of effectiveDbCols) {
     if (SKIP_INSERT.has(col)) continue;
     const v = l[col];
 
@@ -1606,7 +1613,7 @@ export default function ImporterPage({
             try {
               parsedObj = JSON.parse(jsonText);
             } catch {}
-            const BASIC = new Set(["title", "type", "category", "city", "district", "village", "phone", "phone2", "whatsapp", "price", "currency", "description", "ownership", "lat", "lng", "map_lat", "map_lng", "location_accuracy", "geo_source", "created_at", "video_url", "external_url", "messenger_id", "location_detail"]);
+            const BASIC = new Set(["title", "type", "category", "city", "district", "village", "phone", "phone2", "price", "currency", "description", "ownership", "lat", "lng", "map_lat", "map_lng", "location_accuracy", "geo_source", "created_at", "video_url", "external_url", "messenger_id", "location_detail"]);
             const dynKeys = new Set(dynFields.map(f => f.field_key));
             const allKeys = dbColumns.length ? dbColumns : [...dynKeys];
             return <>
