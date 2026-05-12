@@ -23,7 +23,8 @@
     "workbox-expiration": "^7.0.0",
     "workbox-precaching": "^7.0.0",
     "workbox-core": "^7.0.0",
-    "workbox-cacheable-response": "^7.0.0"
+    "workbox-cacheable-response": "^7.0.0",
+    "jszip": "^3.10.1"
   },
   "devDependencies": {
     "vite": "^5.4.10",
