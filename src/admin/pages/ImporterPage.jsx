@@ -1,5 +1,6 @@
 import { BackButton } from "../../shared/components/common/BackButton.jsx";
 import React, { useState, useRef } from "react";
+import JSZip from "jszip";
 import { C } from "../../shared/constants/colors.js";
 import { IslamicPattern, Wave } from "../../shared/components/icons.jsx";
 import { fetchPropertyTypes, fetchListingsSampleColumns, fetchPropertyFieldsForTypeName, fetchAppSettings } from "../../shared/services/propertyMetadataService.js";
@@ -165,6 +166,7 @@ const CATEGORY_FIELDS = {
   }
 };
 const REQUIRED = ["title", "category", "city", "type", "phone"];
+const IMPORT_META_FIELDS = new Set(["import_key", "image_files"]);
 const LISTING_IMAGES_BUCKET = "listing-images";
 const SAFE_STORAGE_PATH = /^[\w./-]+$/;
 const SCHEDULE_OPTIONS = [
@@ -244,7 +246,7 @@ const JSON_TEMPLATE = JSON.stringify({
   city: "دمشق",
   phone: "09XXXXXXXX",
   description: null,
-  price: null,
+  price: 0,
   currency: "USD",
   district: null,
   village: null,
@@ -257,7 +259,7 @@ const JSON_TEMPLATE = JSON.stringify({
   net_area: null,
   land_area: null,
   build_area: null,
-  rooms: null,
+  rooms: 0,
   baths: null,
   floor: null,
   total_floors: null,
@@ -293,6 +295,23 @@ function validateListing(l, index) {
   }
   return errors;
 }
+function parseExtraFieldsValue(value) {
+  if (!value) return {};
+
+  if (typeof value === "object" && !Array.isArray(value)) return value;
+
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+
+  return {};
+}
+
 function buildInsert(l, dbCols = new Set()) {
   const n = v => v !== undefined && v !== null && v !== "" ? Number(v) : null;
   const s = v => v !== undefined && v !== null && v !== "" ? String(v).trim() : null;
@@ -310,8 +329,19 @@ function buildInsert(l, dbCols = new Set()) {
     return null;
   };
 
-  // ما ليس له عمود في DB → extra_fields
-  const extraFields = Object.fromEntries(Object.entries(l).filter(([k, v]) => !dbCols.has(k) && v !== null && v !== undefined && v !== ""));
+  // ما ليس له عمود في DB → extra_fields، مع استثناء حقول الربط الخاصة بالاستيراد.
+  const explicitExtraFields = parseExtraFieldsValue(l.extra_fields);
+  const unknownExtraFields = Object.fromEntries(
+    Object.entries(l).filter(([k, v]) =>
+      k !== "extra_fields" &&
+      !IMPORT_META_FIELDS.has(k) &&
+      !dbCols.has(k) &&
+      v !== null &&
+      v !== undefined &&
+      v !== ""
+    )
+  );
+  const extraFields = { ...explicitExtraFields, ...unknownExtraFields };
 
   // بناء الـ insert ديناميكياً من أعمدة DB
   const BOOL_FIELDS = new Set(["heating", "kitchen", "elevator", "parking", "compound", "pool", "solar", "truck_access", "whatsapp"]);
@@ -341,6 +371,10 @@ function buildInsert(l, dbCols = new Set()) {
       }
       if (col === "currency") {
         row[col] = l.currency || "USD";
+        continue;
+      }
+      if (col === "price" || col === "rooms") {
+        row[col] = 0;
         continue;
       }
       row[col] = null;
@@ -754,6 +788,11 @@ export default function ImporterPage({
   const [csvFilename, setCsvFilename] = useState("");
   const [csvErrors, setCsvErrors] = useState([]);
   const [csvResult, setCsvResult] = useState(null);
+  const [zipRows, setZipRows] = useState([]);
+  const [zipFilename, setZipFilename] = useState("");
+  const [zipErrors, setZipErrors] = useState([]);
+  const [zipResult, setZipResult] = useState(null);
+  const [zipImageFiles, setZipImageFiles] = useState({});
   const [loading, setLoading] = useState(false);
   const [scheduleMode, setScheduleMode] = useState("0");
   const [scheduleAfterMinutes, setScheduleAfterMinutes] = useState("");
@@ -773,6 +812,7 @@ export default function ImporterPage({
     }
   });
   const fileRef = useRef();
+  const zipFileRef = useRef();
   const currentCat = selectedCat;
   const canUseImporter = user?.role === "admin" || (user?.allowedPages || []).includes("importer");
   const selectedScheduleMinutes = scheduleMode === "custom" ? scheduleAfterMinutes : scheduleMode;
@@ -1038,6 +1078,52 @@ export default function ImporterPage({
     return v;
   }
 
+  function getBaseFileName(path) {
+    return String(path || "").split(/[\\/]/).pop()?.trim() || "";
+  }
+
+  function getImageMimeType(name, fallback = "image/jpeg") {
+    const ext = getBaseFileName(name).split(".").pop()?.toLowerCase();
+    if (ext === "png") return "image/png";
+    if (ext === "webp") return "image/webp";
+    if (ext === "gif") return "image/gif";
+    if (ext === "jpeg" || ext === "jpg") return "image/jpeg";
+    return fallback;
+  }
+
+  function splitImageFiles(value) {
+    return String(value || "")
+      .split(/[|؛;،\n]+/)
+      .map(v => v.trim())
+      .filter(Boolean);
+  }
+
+  function mapZipImages(zip) {
+    const images = {};
+    Object.entries(zip.files || {}).forEach(([path, entry]) => {
+      if (entry.dir) return;
+      if (!/\.(jpe?g|png|webp|gif)$/i.test(path)) return;
+      const cleanPath = path.replace(/^\/+/, "");
+      const base = getBaseFileName(cleanPath);
+      images[cleanPath.toLowerCase()] = entry;
+      images[base.toLowerCase()] = entry;
+    });
+    return images;
+  }
+
+  function getZipImageEntry(imageMap, imageName) {
+    const clean = String(imageName || "").replace(/^\/+/, "").trim().toLowerCase();
+    if (!clean) return null;
+    return imageMap[clean] || imageMap[getBaseFileName(clean).toLowerCase()] || null;
+  }
+
+  async function zipEntryToFile(entry, imageName) {
+    const blob = await entry.async("blob");
+    const name = getBaseFileName(imageName) || "image.jpg";
+    const type = getImageMimeType(name, blob.type || "image/jpeg");
+    return new File([blob], name, { type });
+  }
+
   function loadCsv(file) {
     if (!file) return;
 
@@ -1085,6 +1171,135 @@ export default function ImporterPage({
     };
 
     reader.readAsText(file, "UTF-8");
+  }
+
+  async function loadZip(file) {
+    if (!file) return;
+
+    setZipFilename(file.name);
+    setZipRows([]);
+    setZipErrors([]);
+    setZipResult(null);
+    setZipImageFiles({});
+
+    try {
+      const zip = await JSZip.loadAsync(file);
+      const csvPath = Object.keys(zip.files || {}).find(path => /(^|\/)ads\.csv$/i.test(path) && !zip.files[path].dir);
+
+      if (!csvPath) {
+        setZipErrors(["يجب أن يحتوي ملف ZIP على ads.csv"]);
+        return;
+      }
+
+      const text = String(await zip.files[csvPath].async("string") || "").replace(/^\uFEFF/, "");
+      const parsed = parseCsvText(text);
+
+      if (!parsed.length) {
+        setZipErrors(["ملف ads.csv فارغ أو غير قابل للقراءة"]);
+        return;
+      }
+
+      const headers = parsed[0].map((h) => String(h || "").trim().replace(/^"|"$/g, ""));
+      const rows = parsed
+        .slice(1)
+        .map((vals) => {
+          const obj = {};
+          headers.forEach((h, i) => {
+            if (!h) return;
+            obj[h] = normalizeCsvValue(vals[i]);
+          });
+          return obj;
+        })
+        .filter((r) => Object.values(r).some((v) => v !== null && v !== undefined && v !== ""));
+
+      const imageMap = mapZipImages(zip);
+      const errors = rows.flatMap((r, i) => {
+        const rowErrors = validateListing(r, i);
+        const missingImages = splitImageFiles(r.image_files).filter(name => !getZipImageEntry(imageMap, name));
+
+        if (missingImages.length) {
+          rowErrors.push(`صف ${i + 1}: الصور غير موجودة داخل ZIP: ${missingImages.join(", ")}`);
+        }
+
+        return rowErrors;
+      });
+
+      setZipRows(rows);
+      setZipImageFiles(imageMap);
+      setZipErrors(errors);
+    } catch (err) {
+      setZipRows([]);
+      setZipErrors(["تعذّرت قراءة ملف ZIP: " + (err?.message || "خطأ غير معروف")]);
+      setZipImageFiles({});
+    }
+  }
+
+  async function importZip() {
+    setLoading(true);
+    setZipResult(null);
+
+    let ok = 0;
+    let fail = 0;
+    const failMsgs = [];
+    let imageCount = 0;
+
+    for (let i = 0; i < zipRows.length; i++) {
+      const rowUploadedUrls = [];
+
+      try {
+        const scheduledRow = applyImportSchedule(zipRows[i], selectedScheduleMinutes, i);
+        const newListing = await importListingRow({
+          ...buildInsert(scheduledRow, new Set(dbColumns)),
+          user_id: targetUser?.id || user?.id || undefined
+        });
+
+        const imageNames = splitImageFiles(zipRows[i].image_files);
+
+        if (newListing?.id && imageNames.length > 0) {
+          const imgRows = [];
+
+          for (let imgIndex = 0; imgIndex < imageNames.length; imgIndex++) {
+            const imageName = imageNames[imgIndex];
+            const entry = getZipImageEntry(zipImageFiles, imageName);
+
+            if (!entry) {
+              throw new Error(`الصورة غير موجودة داخل ZIP: ${imageName}`);
+            }
+
+            const imageFile = await zipEntryToFile(entry, imageName);
+            const url = await uploadImg(imageFile);
+
+            if (url) {
+              rowUploadedUrls.push(url);
+              imgRows.push({
+                listing_id: newListing.id,
+                url,
+                is_main: imgIndex === 0
+              });
+            }
+          }
+
+          if (imgRows.length) {
+            await attachImportedImages(newListing.id, imgRows);
+            imageCount += imgRows.length;
+          }
+        }
+
+        ok++;
+      } catch (err) {
+        fail++;
+        await cleanupImportedImages(rowUploadedUrls);
+        failMsgs.push(`صف ${i + 1}: ${err?.message || "فشل الإدخال"}`);
+      }
+    }
+
+    setZipResult({
+      ok: fail === 0,
+      msg: `✅ نجح: ${ok}${imageCount ? `\n🖼 تم رفع وربط ${imageCount} صورة في جدول listing_images` : ""}${Number(selectedScheduleMinutes) > 0 ? `\n⏱ تمت الجدولة: ${selectedScheduleLabel} بين كل إعلان` : ""}${fail ? `\n❌ فشل: ${fail}\n${failMsgs.join("\n")}` : ""}`
+    });
+
+    if (ok && reloadListings) reloadListings();
+    setLoading(false);
   }
 
   async function importCsv() {
@@ -1142,7 +1357,7 @@ export default function ImporterPage({
 
       {/* Tabs */}
       <div style={sx.s5(DC)}>
-        {[["json", "📋 إعلان مفرد"], ["csv", "📊 استيراد جماعي"]].map(([t, l]) => {
+        {[["json", "📋 إعلان مفرد"], ["csv", "📊 استيراد جماعي"], ["zip", "📦 ZIP مع صور"]].map(([t, l]) => {
         const sx = {
           s1: (tab, t, C, DC) => ({
             flex: 1,
@@ -1558,7 +1773,7 @@ export default function ImporterPage({
             })}
               </div>
               <div style={sx.s34(DC)}>
-                <strong>اختياري:</strong> description, price, currency, district, village, total_area, rooms, baths, floor, total_floors, ownership, furnished, finishing, condition, heating, elevator, parking, compound, pool, solar, facing_dir, lat, lng, map_lat, map_lng, location_accuracy, geo_source, created_at, external_url, expires_at
+                <strong>اختياري:</strong> description, price, currency, district, village, total_area, rooms, baths, floor, total_floors, ownership, furnished, finishing, condition, heating, elevator, parking, compound, pool, solar, facing_dir, lat, lng, map_lat, map_lng, location_accuracy, geo_source, created_at, video_url, external_url, expires_at
               </div>
             </div>
 
@@ -1616,6 +1831,88 @@ export default function ImporterPage({
                 {csvResult.msg}
               </div>}
           </>}
+
+        {/* ── ZIP Tab ── */}
+        {tab === "zip" && <>
+            <div style={S.card(DC)}>
+              <div style={sx.s30(DC)}>👤 نشر باسم</div>
+              <select value={targetUser?.id || ""} onChange={e => {
+            const u = adminUsers.find(u => u.id === e.target.value);
+            setTargetUser(u || null);
+            try {
+              localStorage.setItem("importer_target_user", JSON.stringify(u || null));
+            } catch {}
+          }} style={sx.s31(inp)}>
+                <option value="">— حسابي الحالي —</option>
+                {adminUsers.map(u => <option key={u.id} value={u.id}>{u.role === "admin" ? "🔴" : u.role === "moderator" ? "🟡" : "🟢"} {u.name}</option>)}
+              </select>
+            </div>
+
+            <div style={S.card(DC)}>
+              <div style={sx.s32(DC)}>📦 بنية ملف ZIP المطلوبة</div>
+              <div style={sx.s34(DC)}>
+                يجب أن يحتوي الملف على <strong>ads.csv</strong> ومجلد <strong>images</strong>. اربط الصور بعمود <strong>image_files</strong> مثل: <strong>ad-002-01.jpg|ad-002-02.jpg</strong>. الإعلانات بلا صور اترك حقل الصور فيها فارغًا.
+              </div>
+              <div style={sx.s34(DC)}>
+                حقلا <strong>import_key</strong> و <strong>image_files</strong> لن يُحفَظا داخل معلومات إضافية؛ يستخدمان فقط للربط أثناء الاستيراد.
+              </div>
+            </div>
+
+            <input
+              type="file"
+              accept=".zip,application/zip,application/x-zip-compressed"
+              ref={zipFileRef}
+              style={S.hidden}
+              onClick={(e) => {
+                e.target.value = "";
+              }}
+              onChange={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+
+                const file = e.target.files?.[0];
+                if (!file) return;
+
+                loadZip(file);
+              }}
+            />
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                zipFileRef.current?.click();
+              }}
+              style={sx.s35(zipFilename, C, DC)}
+            >
+              {zipFilename ? `📦 ${zipFilename}` : "📦 اختر ملف ZIP"}
+            </button>
+
+            {zipRows.length > 0 && <div style={sx.s36(DC, zipErrors)}>
+                <div style={sx.s37(zipErrors)}>
+                  <span style={sx.s38(zipErrors)}>
+                    {zipRows.length} إعلان
+                  </span>
+                  <span style={sx.s39(zipErrors)}>
+                    {zipErrors.length ? `${zipErrors.length} خطأ` : "✅ جاهز"}
+                  </span>
+                </div>
+                <div style={sx.s34(DC)}>
+                  الصور المطلوبة: {zipRows.reduce((sum, row) => sum + splitImageFiles(row.image_files).length, 0)} · الصور الموجودة في الملف: {Object.keys(zipImageFiles).filter(k => !k.includes("/")).length}
+                </div>
+                {zipErrors.length > 0 && <div style={sx.s40}>
+                    {zipErrors.join("\n")}
+                  </div>}
+              </div>}
+
+            {zipRows.length > 0 && zipErrors.length === 0 && <button type="button" onClick={importZip} disabled={loading} style={sx.s41(loading, C)}>
+                {loading ? <><span style={sx.s42} />جارٍ الاستيراد والرفع...</> : `📥 استيراد ${zipRows.length} إعلان مع الصور`}
+              </button>}
+
+            {zipResult && <div style={sx.s43(zipResult)}>
+                {zipResult.msg}
+              </div>}
+          </>}
       </div>
     </div>;
-  }
+    }
