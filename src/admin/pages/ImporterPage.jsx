@@ -169,29 +169,58 @@ const REQUIRED = ["title", "category", "city", "type", "phone"];
 const IMPORT_META_FIELDS = new Set(["import_key", "image_files"]);
 const LISTING_IMAGES_BUCKET = "listing-images";
 const SAFE_STORAGE_PATH = /^[\w./-]+$/;
-const SCHEDULE_OPTIONS = [
-  ["0", "نشر فوري"],
-  ["5", "بعد 5 دقائق"],
-  ["10", "بعد 10 دقائق"],
-  ["15", "بعد 15 دقيقة"],
-  ["30", "بعد 30 دقيقة"],
-  ["60", "بعد ساعة"],
-  ["120", "بعد ساعتين"],
-  ["180", "بعد 3 ساعات"],
-  ["360", "بعد 6 ساعات"],
-  ["720", "بعد 12 ساعة"],
-  ["1440", "بعد يوم"],
-  ["custom", "إدخال دقائق مخصص"]
+const SCHEDULE_MODE_OPTIONS = [
+  ["instant", "نشر فوري"],
+  ["organized", "منظم بفاصل ثابت"],
+  ["random", "عشوائي ضمن مدى دقائق"]
 ];
 
-function scheduleDelayLabel(minutesValue) {
+function formatMinutesLabel(minutesValue) {
   const minutes = Number(minutesValue);
 
-  if (!Number.isFinite(minutes) || minutes <= 0) return "نشر فوري";
-  if (minutes === 60) return "بعد ساعة";
-  if (minutes === 120) return "بعد ساعتين";
-  if (minutes % 60 === 0) return `بعد ${minutes / 60} ساعات`;
-  return `بعد ${minutes} دقيقة`;
+  if (!Number.isFinite(minutes) || minutes <= 0) return "0 دقيقة";
+  if (minutes === 60) return "ساعة";
+  if (minutes === 120) return "ساعتين";
+  if (minutes % 60 === 0) return `${minutes / 60} ساعات`;
+  return `${minutes} دقيقة`;
+}
+
+function isValidImportSchedule(options) {
+  const mode = options?.mode || "instant";
+
+  if (mode === "organized") {
+    const interval = Number(options?.intervalMinutes);
+    return Number.isFinite(interval) && interval > 0;
+  }
+
+  if (mode === "random") {
+    const min = Number(options?.randomMinMinutes);
+    const max = Number(options?.randomMaxMinutes);
+    return Number.isFinite(min) && Number.isFinite(max) && min >= 0 && max >= min && max > 0;
+  }
+
+  return false;
+}
+
+function scheduleDelayLabel(options) {
+  const mode = options?.mode || "instant";
+
+  if (mode === "organized") {
+    const interval = Number(options?.intervalMinutes);
+    if (!Number.isFinite(interval) || interval <= 0) return "منظم: أدخل فاصلاً أكبر من 0";
+    return `منظم: كل ${formatMinutesLabel(interval)} بين إعلان والذي يليه`;
+  }
+
+  if (mode === "random") {
+    const min = Number(options?.randomMinMinutes);
+    const max = Number(options?.randomMaxMinutes);
+    if (!Number.isFinite(min) || !Number.isFinite(max) || min < 0 || max < min || max <= 0) {
+      return "عشوائي: أدخل مدى دقائق صحيح";
+    }
+    return `عشوائي: بين ${formatMinutesLabel(min)} و${formatMinutesLabel(max)} بعد وقت الاستيراد`;
+  }
+
+  return "نشر فوري";
 }
 
 function extractImportedStoragePath(value) {
@@ -409,20 +438,40 @@ function buildInsert(l, dbCols = new Set()) {
   return row;
 }
 
-function applyImportSchedule(listing, scheduleAfterMinutes, index = 0) {
-  const minutes = Number(scheduleAfterMinutes);
+function applyImportSchedule(listing, scheduleOptions, index = 0) {
+  const mode = scheduleOptions?.mode || "instant";
 
-  if (!Number.isFinite(minutes) || minutes <= 0) {
-    return listing;
+  if (mode === "organized") {
+    const interval = Number(scheduleOptions?.intervalMinutes);
+    if (!Number.isFinite(interval) || interval <= 0) return listing;
+
+    const multiplier = Math.max(1, index + 1);
+    const createdAt = new Date(Date.now() + interval * multiplier * 60 * 1000).toISOString();
+
+    return {
+      ...listing,
+      created_at: createdAt
+    };
   }
 
-  const multiplier = Math.max(1, index + 1);
-  const createdAt = new Date(Date.now() + minutes * multiplier * 60 * 1000).toISOString();
+  if (mode === "random") {
+    const rawMin = Number(scheduleOptions?.randomMinMinutes);
+    const rawMax = Number(scheduleOptions?.randomMaxMinutes);
 
-  return {
-    ...listing,
-    created_at: createdAt
-  };
+    if (!Number.isFinite(rawMin) || !Number.isFinite(rawMax) || rawMin < 0 || rawMax < rawMin || rawMax <= 0) {
+      return listing;
+    }
+
+    const delayMinutes = rawMin + Math.random() * (rawMax - rawMin);
+    const createdAt = new Date(Date.now() + delayMinutes * 60 * 1000).toISOString();
+
+    return {
+      ...listing,
+      created_at: createdAt
+    };
+  }
+
+  return listing;
 }
 
 export default function ImporterPage({
@@ -794,8 +843,10 @@ export default function ImporterPage({
   const [zipResult, setZipResult] = useState(null);
   const [zipImageFiles, setZipImageFiles] = useState({});
   const [loading, setLoading] = useState(false);
-  const [scheduleMode, setScheduleMode] = useState("0");
+  const [scheduleMode, setScheduleMode] = useState("instant");
   const [scheduleAfterMinutes, setScheduleAfterMinutes] = useState("");
+  const [scheduleRandomMinMinutes, setScheduleRandomMinMinutes] = useState("");
+  const [scheduleRandomMaxMinutes, setScheduleRandomMaxMinutes] = useState("");
   const [pastedImages, setPastedImages] = useState([]);
   const [adminUsers, setAdminUsers] = useState([]);
   const [durations, setDurations] = useState({
@@ -815,8 +866,14 @@ export default function ImporterPage({
   const zipFileRef = useRef();
   const currentCat = selectedCat;
   const canUseImporter = user?.role === "admin" || (user?.allowedPages || []).includes("importer");
-  const selectedScheduleMinutes = scheduleMode === "custom" ? scheduleAfterMinutes : scheduleMode;
-  const selectedScheduleLabel = scheduleDelayLabel(selectedScheduleMinutes);
+  const selectedScheduleOptions = {
+    mode: scheduleMode,
+    intervalMinutes: scheduleAfterMinutes,
+    randomMinMinutes: scheduleRandomMinMinutes,
+    randomMaxMinutes: scheduleRandomMaxMinutes
+  };
+  const selectedScheduleLabel = scheduleDelayLabel(selectedScheduleOptions);
+  const hasSelectedSchedule = isValidImportSchedule(selectedScheduleOptions);
   React.useEffect(() => {
     window.__importDurations = durations;
   }, [durations]);
@@ -988,7 +1045,7 @@ export default function ImporterPage({
     const uploadedUrls = uploadedImageUrls(imagesSnapshot);
 
     try {
-      const scheduledObj = applyImportSchedule(obj, selectedScheduleMinutes, 0);
+      const scheduledObj = applyImportSchedule(obj, selectedScheduleOptions, 0);
 
       const newListing = await importListingRow({
         ...buildInsert(scheduledObj, new Set(dbColumns)),
@@ -1007,7 +1064,7 @@ export default function ImporterPage({
 
       setJsonResult({
         ok: true,
-        msg: `✅ تم الاستيراد!${Number(selectedScheduleMinutes) > 0 ? " · مجدول " + selectedScheduleLabel : ""}${readyImages.length > 0 ? " · " + readyImages.length + " صورة" : ""}`
+        msg: `✅ تم الاستيراد!${hasSelectedSchedule ? " · تم ضبط created_at: " + selectedScheduleLabel : ""}${readyImages.length > 0 ? " · " + readyImages.length + " صورة" : ""}`
       });
 
       if (reloadListings) reloadListings();
@@ -1247,7 +1304,7 @@ export default function ImporterPage({
       const rowUploadedUrls = [];
 
       try {
-        const scheduledRow = applyImportSchedule(zipRows[i], selectedScheduleMinutes, i);
+        const scheduledRow = applyImportSchedule(zipRows[i], selectedScheduleOptions, i);
         const newListing = await importListingRow({
           ...buildInsert(scheduledRow, new Set(dbColumns)),
           user_id: targetUser?.id || user?.id || undefined
@@ -1295,7 +1352,7 @@ export default function ImporterPage({
 
     setZipResult({
       ok: fail === 0,
-      msg: `✅ نجح: ${ok}${imageCount ? `\n🖼 تم رفع وربط ${imageCount} صورة في جدول listing_images` : ""}${Number(selectedScheduleMinutes) > 0 ? `\n⏱ تمت الجدولة: ${selectedScheduleLabel} بين كل إعلان` : ""}${fail ? `\n❌ فشل: ${fail}\n${failMsgs.join("\n")}` : ""}`
+      msg: `✅ نجح: ${ok}${imageCount ? `\n🖼 تم رفع وربط ${imageCount} صورة في جدول listing_images` : ""}${hasSelectedSchedule ? `\n⏱ تم ضبط created_at: ${selectedScheduleLabel}` : ""}${fail ? `\n❌ فشل: ${fail}\n${failMsgs.join("\n")}` : ""}`
     });
 
     if (ok && reloadListings) reloadListings();
@@ -1310,7 +1367,7 @@ export default function ImporterPage({
       failMsgs = [];
     for (let i = 0; i < csvRows.length; i++) {
       try {
-        const scheduledRow = applyImportSchedule(csvRows[i], selectedScheduleMinutes, i);
+        const scheduledRow = applyImportSchedule(csvRows[i], selectedScheduleOptions, i);
 
         await importListingRow({
           ...buildInsert(scheduledRow, new Set(dbColumns)),
@@ -1324,7 +1381,7 @@ export default function ImporterPage({
     }
     setCsvResult({
       ok: fail === 0,
-      msg: `✅ نجح: ${ok}${Number(selectedScheduleMinutes) > 0 ? `\n⏱ تمت الجدولة: ${selectedScheduleLabel} بين كل إعلان` : ""}${fail ? `\n❌ فشل: ${fail}\n${failMsgs.join("\n")}` : ""}`
+      msg: `✅ نجح: ${ok}${hasSelectedSchedule ? `\n⏱ تم ضبط created_at: ${selectedScheduleLabel}` : ""}${fail ? `\n❌ فشل: ${fail}\n${failMsgs.join("\n")}` : ""}`
     });
     setLoading(false);
   }
@@ -1377,40 +1434,85 @@ export default function ImporterPage({
       </div>
 
       <div style={sx.s6}>
-        {/* جدولة النشر */}
+        {/* جدولة created_at */}
         <div style={S.card(DC)}>
-          <div style={sx.s7(DC)}>⏱ جدولة النشر بعد</div>
+          <div style={sx.s7(DC)}>⏱ جدولة تاريخ إنشاء الإعلان created_at</div>
           <select
             value={scheduleMode}
             onChange={e => {
               const value = e.target.value;
               setScheduleMode(value);
-              if (value !== "custom") setScheduleAfterMinutes("");
+              if (value !== "organized") setScheduleAfterMinutes("");
+              if (value !== "random") {
+                setScheduleRandomMinMinutes("");
+                setScheduleRandomMaxMinutes("");
+              }
             }}
             style={sx.s8(inp)}
           >
-            {SCHEDULE_OPTIONS.map(([value, label]) => (
+            {SCHEDULE_MODE_OPTIONS.map(([value, label]) => (
               <option key={value} value={value}>{label}</option>
             ))}
           </select>
 
-          {scheduleMode === "custom" && (
-            <input
-              type="number"
-              min="0"
-              inputMode="numeric"
-              value={scheduleAfterMinutes}
-              onChange={e => {
-                const value = e.target.value;
-                setScheduleAfterMinutes(value === "" ? "" : String(Math.max(0, Number(value) || 0)));
-              }}
-              placeholder="أدخل عدد الدقائق، مثال: 45"
-              style={{ ...inp, marginTop: 8 }}
-            />
+          {scheduleMode === "organized" && (
+            <div style={{ marginTop: 8 }}>
+              <div style={sx.s7(DC)}>الفاصل المنظّم بين كل إعلان والذي يليه بالدقائق</div>
+              <input
+                type="number"
+                min="1"
+                inputMode="numeric"
+                value={scheduleAfterMinutes}
+                onChange={e => {
+                  const value = e.target.value;
+                  setScheduleAfterMinutes(value === "" ? "" : String(Math.max(1, Number(value) || 1)));
+                }}
+                placeholder="مثال: 8"
+                style={inp}
+              />
+              <div style={sx.s34(DC)}>
+                مثال: إذا كتبت 8 فسيكون الإعلان الأول بعد 8 دقائق، والثاني بعد 16 دقيقة، والثالث بعد 24 دقيقة.
+              </div>
+            </div>
+          )}
+
+          {scheduleMode === "random" && (
+            <div style={{ marginTop: 8 }}>
+              <div style={sx.s7(DC)}>مدى عشوائي بالدقائق بعد وقت الاستيراد</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                <input
+                  type="number"
+                  min="0"
+                  inputMode="numeric"
+                  value={scheduleRandomMinMinutes}
+                  onChange={e => {
+                    const value = e.target.value;
+                    setScheduleRandomMinMinutes(value === "" ? "" : String(Math.max(0, Number(value) || 0)));
+                  }}
+                  placeholder="من، مثال: 5"
+                  style={inp}
+                />
+                <input
+                  type="number"
+                  min="1"
+                  inputMode="numeric"
+                  value={scheduleRandomMaxMinutes}
+                  onChange={e => {
+                    const value = e.target.value;
+                    setScheduleRandomMaxMinutes(value === "" ? "" : String(Math.max(1, Number(value) || 1)));
+                  }}
+                  placeholder="إلى، مثال: 120"
+                  style={inp}
+                />
+              </div>
+              <div style={sx.s34(DC)}>
+                مثال: من 5 إلى 120 يعني أن كل إعلان سيأخذ created_at عشوائيًا بين 5 دقائق وساعتين بعد وقت الاستيراد.
+              </div>
+            </div>
           )}
 
           <div style={sx.s34(DC)}>
-            الاختيار الحالي: <strong>{selectedScheduleLabel}</strong>. في الاستيراد الجماعي سيُضاف نفس الفاصل بين كل إعلان والذي يليه.
+            الاختيار الحالي: <strong>{selectedScheduleLabel}</strong>. هذا يغيّر حقل <strong>created_at</strong> فقط ولا يغيّر حالة الإعلان ولا يحتاج أي عمود جديد في قاعدة البيانات.
           </div>
         </div>
 
@@ -1915,4 +2017,4 @@ export default function ImporterPage({
           </>}
       </div>
     </div>;
-        }
+      }
