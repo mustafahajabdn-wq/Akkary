@@ -17,12 +17,14 @@ function toNumber(value, fallback = 0) {
 
 function getListingArea(listing) {
   return toNumber(
+    listing?.net_area ??
     listing?.total_area ??
-    listing?.area ??
     listing?.land_area ??
     listing?.build_area ??
+    listing?.extra_fields?.net_area ??
     listing?.extra_fields?.total_area ??
-    listing?.extra_fields?.area,
+    listing?.extra_fields?.land_area ??
+    listing?.extra_fields?.build_area,
     0
   );
 }
