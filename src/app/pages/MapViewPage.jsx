@@ -48,6 +48,37 @@ function hasActiveFilterValue(value) {
   return value !== undefined && value !== null && value !== "" && value !== "الكل" && value !== "newest";
 }
 
+function isFilledFilterValue(value) {
+  if (Array.isArray(value)) return value.length > 0;
+  return value !== undefined && value !== null && value !== "" && value !== "الكل" && value !== "newest";
+}
+
+function getCategoryFilterValues(value) {
+  if (!isFilledFilterValue(value)) return [];
+  const v = String(value || "").trim();
+  if (v === "محل" || v === "محل تجاري") return ["محل تجاري", "محل"];
+  return [v];
+}
+
+function buildAreaRangeOrFilter(minArea, maxArea) {
+  const min = isFilledFilterValue(minArea) ? Number(minArea) : null;
+  const max = isFilledFilterValue(maxArea) ? Number(maxArea) : null;
+
+  if ((min !== null && !Number.isFinite(min)) || (max !== null && !Number.isFinite(max))) return "";
+  if (min === null && max === null) return "";
+
+  // لا نعتمد على عمود area لأنه سيُحذف من قاعدة البيانات.
+  // نبحث في حقول المساحة الفعلية المعتمدة فقط.
+  const columns = ["net_area", "total_area", "land_area", "build_area"];
+
+  return columns.map((col) => {
+    const parts = [];
+    if (min !== null) parts.push(`${col}.gte.${min}`);
+    if (max !== null) parts.push(`${col}.lte.${max}`);
+    return parts.length === 1 ? parts[0] : `and(${parts.join(",")})`;
+  }).join(",");
+}
+
 function filterLabelList(value) {
   if (Array.isArray(value)) return value.filter(Boolean).join(",");
   return value || "";
@@ -106,12 +137,14 @@ function hasCoords(lat, lng) {
 
 function getAreaValue(row) {
   return toNumber(
-    row?.total_area ??
-      row?.area ??
-      row?.net_area ??
+    row?.net_area ??
+      row?.total_area ??
       row?.land_area ??
       row?.build_area ??
-      row?.facade,
+      row?.extra_fields?.net_area ??
+      row?.extra_fields?.total_area ??
+      row?.extra_fields?.land_area ??
+      row?.extra_fields?.build_area,
     0
   );
 }
@@ -243,7 +276,13 @@ function applyServerFilters(query, { activeType, activeCity, activeDistrict, act
   if (locationFilter === "approx") q = q.eq("location_accuracy", "approx");
 
   if (filters?.currency && filters.currency !== "الكل") q = q.eq("currency", filters.currency);
-  if (filters?.category && filters.category !== "الكل") q = q.eq("category", filters.category);
+
+  if (isFilledFilterValue(filters?.category)) {
+    const categoryValues = getCategoryFilterValues(filters.category);
+    if (categoryValues.length === 1) q = q.eq("category", categoryValues[0]);
+    else if (categoryValues.length > 1) q = q.in("category", categoryValues);
+  }
+
   if (filters?.condition && filters.condition !== "الكل") q = q.eq("condition", filters.condition);
   if (filters?.finishing && filters.finishing !== "الكل") q = q.eq("finishing", filters.finishing);
   if (filters?.heating && filters.heating !== "الكل") q = q.eq("heating", filters.heating);
@@ -257,8 +296,8 @@ function applyServerFilters(query, { activeType, activeCity, activeDistrict, act
   if (filters?.minPrice) q = q.gte("price", Number(filters.minPrice));
   if (filters?.maxPrice) q = q.lte("price", Number(filters.maxPrice));
 
-  if (filters?.minArea) q = q.gte("total_area", Number(filters.minArea));
-  if (filters?.maxArea) q = q.lte("total_area", Number(filters.maxArea));
+  const areaRangeOr = buildAreaRangeOrFilter(filters?.minArea, filters?.maxArea);
+  if (areaRangeOr) q = q.or(areaRangeOr);
 
   if (filters?.beds && filters.beds !== "الكل") {
     if (filters.beds === "5+") q = q.gte("rooms", 5);
@@ -316,7 +355,7 @@ async function fetchMapListingsInBounds({
       rooms,
       beds,
       floor,
-      area,
+      net_area,
       total_area,
       land_area,
       build_area,
@@ -1370,4 +1409,4 @@ export default function MapViewPage({ setPage, openDetail, DC = C, user }) {
       </div>
     </div>
   );
-                       }
+    }
