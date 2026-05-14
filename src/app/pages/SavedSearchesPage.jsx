@@ -4,6 +4,14 @@ import { IslamicPattern, Wave } from "../../shared/components/icons.jsx";
 import { BackButton } from "../../shared/components/common/BackButton.jsx";
 import { fetchUserSavedSearches, updateSavedSearchNotif, deleteSavedSearch } from "../services/savedSearchService.js";
 import { S, mergeStyles } from "../../shared/styles/primitives.js";
+
+function savedSearchTypeLabel(value) {
+  if (value === "sell" || value === "للبيع") return "🏷️ للبيع";
+  if (value === "rent" || value === "lease" || value === "تأجير" || value === "للإيجار") return "🔑 للإيجار";
+  if (value === "want_buy" || value === "مطلوب شراء") return "🟦 مطلوب شراء";
+  if (value === "want_rent" || value === "مطلوب للإيجار" || value === "مطلوب إيجار") return "🟩 مطلوب للإيجار";
+  return null;
+}
 function SavedSearchesPage({
   setPage,
   DC,
@@ -145,7 +153,8 @@ function SavedSearchesPage({
   const filterTags = s => {
     const tags = [];
     if (s.city) tags.push("📍 " + s.city);
-    if (s.type) tags.push(s.type === "sell" ? "🏷️ للبيع" : "🔑 للإيجار");
+    const typeLabel = savedSearchTypeLabel(s.type);
+    if (typeLabel) tags.push(typeLabel);
     if (s.category) tags.push("🏠 " + s.category);
     if (s.max_price) tags.push("حتى " + Number(s.max_price).toLocaleString());
     return tags;
