@@ -30,6 +30,14 @@ function filterLabelList(value) {
   return value || "";
 }
 
+function getDbTypeFromActiveType(activeType) {
+  if (activeType === "للبيع" || activeType === "sell") return "sell";
+  if (activeType === "للإيجار" || activeType === "rent" || activeType === "lease" || activeType === "تأجير") return "rent";
+  if (activeType === "want_buy" || activeType === "مطلوب شراء") return "want_buy";
+  if (activeType === "want_rent" || activeType === "مطلوب للإيجار" || activeType === "مطلوب إيجار") return "want_rent";
+  return null;
+}
+
 const normalizeFollowId = (item) => {
   if (!item) return null;
   if (typeof item === "string") return item;
@@ -889,7 +897,7 @@ function HomePage({
       query: label,
       city: activeCity !== "الكل" ? activeCity : null,
       district: activeDistrict !== "الكل" ? activeDistrict : null,
-      type: activeType !== "الكل" ? activeType : null,
+      type: activeType !== "الكل" ? getDbTypeFromActiveType(activeType) : null,
       category: filters.category && filters.category !== "الكل" ? filters.category : null,
       min_price: filters.minPrice || null,
       max_price: filters.maxPrice || null,
