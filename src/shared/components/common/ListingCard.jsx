@@ -167,16 +167,22 @@ function ListingCard({
   if (!DC) DC = C;
   const isFaved = favs?.includes(Number(item.id)) || favs?.includes(String(item.id));
   const isWant = item.type === "want_buy" || item.type === "want_rent";
+  const categoryKey = String(item.category || "").trim();
   const emoji = {
-    شقة: "🏢",
+    "شقة": "🏢",
     "بيت عربي": "🏠",
     "أرض سكنية": "🏗️",
-    محل: "🏪",
-    مكتب: "🏢",
+    "أرض زراعية": "🌾",
+    "محل": "🏪",
+    "محل تجاري": "🏪",
+    "مستودع": "📦",
+    "مكتب": "🖥️",
     "فيلا-مزرعة": "🏡",
-    فيلا: "🏡",
-    مزرعة: "🌿"
-  }[item.category] || "🏠";
+    "فيلا": "🏡",
+    "مزرعة": "🌿",
+    "شاليه": "🏖️",
+    "سكن طلاب": "🎓"
+  }[categoryKey] || "🏠";
   const typeStyle = getListingTypeStyle(item.type);
   const typeLabel = typeStyle.label;
   const typeColor = typeStyle.color;
