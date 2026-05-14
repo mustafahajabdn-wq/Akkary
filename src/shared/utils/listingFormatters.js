@@ -58,12 +58,12 @@ export function formatListingLocation(item) {
 
 export function formatListingArea(item) {
   const area = toNumber(
-    item?.total_area ??
-      item?.area ??
+    item?.net_area ??
+      item?.total_area ??
       item?.land_area ??
       item?.build_area ??
+      getExtra(item, "net_area") ??
       getExtra(item, "total_area") ??
-      getExtra(item, "area") ??
       getExtra(item, "land_area") ??
       getExtra(item, "build_area")
   );
