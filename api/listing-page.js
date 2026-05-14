@@ -60,7 +60,7 @@ async function fetchListing(id) {
   const params = new URLSearchParams();
   params.set(
     "select",
-    "id,title,description,price,currency,type,category,city,district,village,area,rooms,floor,status,admin_status,expires_at,created_at"
+    "id,title,description,price,currency,type,category,city,district,village,total_area,net_area,land_area,build_area,rooms,floor,status,admin_status,expires_at,created_at"
   );
   params.set("id", `eq.${id}`);
   params.set("status", "eq.active");
@@ -120,6 +120,17 @@ function removeOldSeo(html) {
     .replace(/<script\s+type=["']application\/ld\+json["'][\s\S]*?<\/script>/gi, "");
 }
 
+function getListingArea(listing) {
+  const value =
+    listing?.net_area ??
+    listing?.total_area ??
+    listing?.land_area ??
+    listing?.build_area;
+
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 function buildListingSeo(listing, imageUrl = "") {
   const title = cleanText(listing.title || "إعلان عقاري", 80);
   const city = cleanText(listing.city || "", 35);
@@ -133,7 +144,7 @@ function buildListingSeo(listing, imageUrl = "") {
     title,
     category ? `نوع العقار: ${category}` : "",
     district || city ? `الموقع: ${[city, district].filter(Boolean).join(" - ")}` : "",
-    listing.area ? `المساحة: ${listing.area} م²` : "",
+    getListingArea(listing) ? `المساحة: ${getListingArea(listing)} م²` : "",
     price ? `السعر: ${price}` : "",
   ]
     .filter(Boolean)
