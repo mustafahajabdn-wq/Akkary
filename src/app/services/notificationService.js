@@ -1,6 +1,25 @@
 import { getSupabase } from "../../shared/services/supabaseClient.js";
 import { shouldStartRealtime } from "../../shared/utils/realtimePolicy.js";
 
+
+function getNotificationListingId(notification) {
+  return (
+    notification?.listing_id ||
+    notification?.data?.listing_id ||
+    notification?.data?.listingId ||
+    null
+  );
+}
+
+function getNotificationText(notification) {
+  return (
+    notification?.text ||
+    notification?.body ||
+    notification?.title ||
+    ""
+  );
+}
+
 function getNotificationConversationId(notification) {
   return (
     notification?.conversation_id ||
@@ -63,11 +82,12 @@ export async function listNotificationsWithContext(userId, limit = 50) {
   const convMap = await fetchNotificationConversationMap(userId, rows);
   return rows.map((n) => ({
     id: n.id,
-    text: n.text || "",
+    text: getNotificationText(n),
     time: n.created_at ? new Date(n.created_at).toLocaleDateString("ar") : "",
     read: n.is_read || false,
     type: n.type || "general",
-    listing_id: n.listing_id,
+    listing_id: getNotificationListingId(n),
+    data: n.data || {},
     conv: getNotificationConversationId(n) ? convMap[getNotificationConversationId(n)] || null : null,
   }));
 }
