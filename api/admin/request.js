@@ -29,6 +29,7 @@ const ALLOWED_REST_TABLES = new Set([
   "property_types",
   "push_subscriptions",
   "reports",
+  "saved_searches",
 ]);
 
 const ALLOWED_RPC = new Set([
@@ -223,4 +224,4 @@ export default async function handler(req, res) {
       error: error.message || "Unexpected admin proxy error",
     });
   }
-}
+  }
