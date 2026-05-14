@@ -511,6 +511,8 @@ function normalizeListingType(value) {
     "إيجار": "rent",
     "ايجار": "rent",
     rent: "rent",
+    lease: "rent",
+    "تأجير": "rent",
     "مطلوب شراء": "want_buy",
     want_buy: "want_buy",
     "مطلوب إيجار": "want_rent",
@@ -524,6 +526,30 @@ function normalizeListingType(value) {
 function normalizeTextSearchValue(value) {
   if (!isFilledFilterValue(value)) return null;
   return String(value).split("(")[0].trim();
+}
+
+function getCategoryFilterValues(value) {
+  if (!isFilledFilterValue(value)) return [];
+  const v = String(value || "").trim();
+  if (v === "محل" || v === "محل تجاري") return ["محل تجاري", "محل"];
+  return [v];
+}
+
+function buildAreaRangeOrFilter(minArea, maxArea) {
+  const min = isFilledFilterValue(minArea) ? Number(minArea) : null;
+  const max = isFilledFilterValue(maxArea) ? Number(maxArea) : null;
+
+  if ((min !== null && !Number.isFinite(min)) || (max !== null && !Number.isFinite(max))) return "";
+  if (min === null && max === null) return "";
+
+  const columns = ["net_area", "total_area", "land_area", "build_area"];
+
+  return columns.map(col => {
+    const parts = [];
+    if (min !== null) parts.push(`${col}.gte.${min}`);
+    if (max !== null) parts.push(`${col}.lte.${max}`);
+    return parts.length === 1 ? parts[0] : `and(${parts.join(",")})`;
+  }).join(",");
 }
 
 function applyApprovedListingsQueryFilters(query, filterInput = {}) {
@@ -541,14 +567,18 @@ function applyApprovedListingsQueryFilters(query, filterInput = {}) {
   if (isFilledFilterValue(activeDistrict)) query = query.eq("district", activeDistrict);
   if (isFilledFilterValue(activeVillage)) query = query.eq("village", activeVillage);
 
-  if (isFilledFilterValue(advanced.category)) query = query.eq("category", advanced.category);
+  if (isFilledFilterValue(advanced.category)) {
+    const categoryValues = getCategoryFilterValues(advanced.category);
+    if (categoryValues.length === 1) query = query.eq("category", categoryValues[0]);
+    else if (categoryValues.length > 1) query = query.in("category", categoryValues);
+  }
   if (isFilledFilterValue(advanced.currency)) query = query.eq("currency", advanced.currency);
 
   if (isFilledFilterValue(advanced.minPrice)) query = query.gte("price", Number(advanced.minPrice));
   if (isFilledFilterValue(advanced.maxPrice)) query = query.lte("price", Number(advanced.maxPrice));
 
-  if (isFilledFilterValue(advanced.minArea)) query = query.gte("total_area", Number(advanced.minArea));
-  if (isFilledFilterValue(advanced.maxArea)) query = query.lte("total_area", Number(advanced.maxArea));
+  const areaRangeOr = buildAreaRangeOrFilter(advanced.minArea, advanced.maxArea);
+  if (areaRangeOr) query = query.or(areaRangeOr);
 
   if (isFilledFilterValue(advanced.beds)) {
     if (advanced.beds === "5+") {
@@ -645,4 +675,4 @@ export function subscribeToListingsChanges(onChange) {
     .subscribe();
 
   return () => sb.removeChannel(ch);
-}
+    }
