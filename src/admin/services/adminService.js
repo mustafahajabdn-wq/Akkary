@@ -565,23 +565,73 @@ function buildListingMatchNotification(search, listing) {
   };
 }
 
+function isAdminMissingColumnError(error) {
+  const msg = String(error?.message || error?.payload?.error || error?.payload?.text || "").toLowerCase();
+  return error?.status === 400 || error?.payload?.status === 400 || msg.includes("column") || msg.includes("schema cache") || msg.includes("pgrst204");
+}
+
+async function insertListingMatchNotifications(rows) {
+  if (!rows.length) return { inserted: 0 };
+
+  try {
+    await adminPost("/rest/v1/notifications", rows, {
+      prefer: "return=minimal"
+    });
+    return { inserted: rows.length };
+  } catch (error) {
+    // احتياط لقواعد قديمة لا تملك عمود data. لا نريد تعطيل الاستيراد بسبب الإشعار.
+    if (!isAdminMissingColumnError(error)) throw error;
+
+    const minimalRows = rows.map(({ data, ...row }) => row);
+    await adminPost("/rest/v1/notifications", minimalRows, {
+      prefer: "return=minimal"
+    });
+    return { inserted: minimalRows.length };
+  }
+}
+
 async function notifySavedSearchMatchesForListing(listing) {
-  if (!listing?.id) return { matched: 0 };
+  if (!listing?.id) return { matched: 0, inserted: 0 };
 
   const status = listing.status || "active";
   const adminStatus = listing.admin_status || "approved";
-  if (status !== "active" || adminStatus !== "approved") return { matched: 0 };
+  if (status !== "active" || adminStatus !== "approved") return { matched: 0, inserted: 0 };
 
   const savedSearches = await adminGet("/rest/v1/saved_searches?notif=eq.true&select=*&limit=5000", []);
   const matches = (Array.isArray(savedSearches) ? savedSearches : [])
     .filter(search => savedSearchMatchesListing(search, listing));
 
-  if (!matches.length) return { matched: 0 };
+  if (!matches.length) return { matched: 0, inserted: 0 };
 
-  const rows = matches.map(search => buildListingMatchNotification(search, listing));
-  await adminPost("/rest/v1/notifications", rows, {
-    prefer: "return=minimal"
-  });
+  let existingRows = [];
+  try {
+    existingRows = await adminGet(
+      `/rest/v1/notifications?type=eq.listing_match&data->>listing_id=eq.${encodeURIComponent(String(listing.id))}&select=id,user_id,data&limit=5000`,
+      []
+    );
+  } catch (error) {
+    // فحص التكرار اختياري؛ لا نوقف الإشعار إذا كان عمود data غير موجود في قاعدة قديمة.
+    console.warn("saved search duplicate check skipped", error);
+  }
+
+  const seen = new Set(
+    (Array.isArray(existingRows) ? existingRows : [])
+      .map(n => {
+        const data = safeJsonObject(n.data);
+        const listingId = data.listing_id || data.listingId;
+        const searchId = data.saved_search_id || data.savedSearchId || "";
+        return listingId ? `${n.user_id}:${listingId}:${searchId}` : null;
+      })
+      .filter(Boolean)
+  );
+
+  const rows = matches
+    .map(search => buildListingMatchNotification(search, listing))
+    .filter(row => !seen.has(`${row.user_id}:${row.data.listing_id}:${row.data.saved_search_id || ""}`));
+
+  if (!rows.length) return { matched: matches.length, inserted: 0 };
+
+  const insertResult = await insertListingMatchNotifications(rows);
 
   await Promise.allSettled(
     rows.map(row => adminInvokeFunction(
@@ -590,13 +640,40 @@ async function notifySavedSearchMatchesForListing(listing) {
         user_id: row.user_id,
         title: "عقار جديد يطابق بحثك",
         body: row.text.replace(/^🔔\s*/, ""),
-        url: row.data.url
+        url: row.data?.url || "/notifications"
       },
       { fallback: {} }
     ))
   );
 
-  return { matched: rows.length };
+  return { matched: rows.length, inserted: insertResult.inserted || rows.length };
+}
+
+async function fetchListingForSavedSearchNotification(listingId) {
+  const id = String(listingId ?? "").trim();
+  if (!id) return null;
+
+  const rows = await adminGet(
+    `/rest/v1/listings?id=eq.${encodeURIComponent(id)}&select=*`,
+    []
+  );
+
+  return Array.isArray(rows) ? rows[0] || null : rows || null;
+}
+
+async function notifySavedSearchMatchesForListingId(listingId) {
+  const listing = await fetchListingForSavedSearchNotification(listingId);
+  if (!listing) return { matched: 0, inserted: 0 };
+  return notifySavedSearchMatchesForListing(listing);
+}
+
+async function notifySavedSearchMatchesSafelyForListingId(listingId, context = "saved search notification") {
+  try {
+    return await notifySavedSearchMatchesForListingId(listingId);
+  } catch (error) {
+    console.warn(`${context} skipped`, error);
+    return { matched: 0, inserted: 0, error };
+  }
 }
 
 export async function uploadImportedImage(file) {
@@ -731,11 +808,13 @@ export async function deleteAdminListingCascade(id) {
   await removeAdminStorageUrls(storageUrls);
 }
 
-export function approveAdminListing(id) {
-  return adminPatch(`/rest/v1/listings?id=eq.${id}`, {
+export async function approveAdminListing(id) {
+  await adminPatch(`/rest/v1/listings?id=eq.${id}`, {
     status: "active",
     admin_status: "approved"
   });
+
+  return notifySavedSearchMatchesSafelyForListingId(id, "approveAdminListing");
 }
 
 export function toggleAdminListingFlag(listing) {
@@ -747,7 +826,12 @@ export function toggleAdminListingFlag(listing) {
 
   return adminPatch(`/rest/v1/listings?id=eq.${listing.id}`, {
     admin_status
-  }).then(() => admin_status);
+  }).then(async () => {
+    if (admin_status === "approved") {
+      await notifySavedSearchMatchesSafelyForListingId(listing.id, "toggleAdminListingFlag");
+    }
+    return admin_status;
+  });
 }
 
 export function rejectAdminListing(id, reason) {
@@ -772,7 +856,10 @@ export function extendAdminListing(id, listing, days) {
     expires_at,
     status: "active",
     admin_status: "approved"
-  }).then(() => expires_at);
+  }).then(async () => {
+    await notifySavedSearchMatchesSafelyForListingId(id, "extendAdminListing");
+    return expires_at;
+  });
 }
 
 export async function fetchPendingListings() {
@@ -787,11 +874,13 @@ export async function fetchPendingListings() {
   return Array.isArray(data) ? data : [];
 }
 
-export function approveListing(listingId) {
-  return adminPatch(`/rest/v1/listings?id=eq.${listingId}`, {
+export async function approveListing(listingId) {
+  await adminPatch(`/rest/v1/listings?id=eq.${listingId}`, {
     status: "active",
     admin_status: "approved"
   });
+
+  return notifySavedSearchMatchesSafelyForListingId(listingId, "approveListing");
 }
 
 export function rejectListing(listingId, reason) {
@@ -1058,10 +1147,16 @@ export function patchReportedProfile(id, obj) {
   return adminPatch(`/rest/v1/profiles?id=eq.${id}`, obj);
 }
 
-export function setAdminListingVisibility(listingId, admin_status) {
-  return adminPatch(`/rest/v1/listings?id=eq.${listingId}`, {
+export async function setAdminListingVisibility(listingId, admin_status) {
+  await adminPatch(`/rest/v1/listings?id=eq.${listingId}`, {
     admin_status
   });
+
+  if (admin_status === "approved") {
+    return notifySavedSearchMatchesSafelyForListingId(listingId, "setAdminListingVisibility");
+  }
+
+  return null;
 }
 
 export function deleteReportsByIds(ids) {
