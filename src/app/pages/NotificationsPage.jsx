@@ -155,6 +155,7 @@ function NotificationsPage({
     if (type === "answer") return "✅";
     if (type === "announcement") return "📣";
     if (type === "message") return "💬";
+    if (type === "listing_match" || type === "saved_search") return "🏠";
     if (type === "ad_approved") return "✅";
     if (type === "ad_rejected") return "❌";
     return "🔔";
@@ -258,20 +259,20 @@ function NotificationsPage({
         };
         return <div key={n.id} onClick={async () => {
           await markRead(n.id);
-          if ((n.type === "question" || n.type === "answer") && n.listing_id && openDetail) {
-            fetchListingDetail(n.listing_id).then(data => {
-              if (data) openDetail({
-                ...data,
-                _scrollToQA: true
-              }, "notifications");
-            });
-            return;
-          }
           if (n.type === "message" && n.conv && setChat) {
             setChat({
               ...n.conv
             });
             setPage("chat");
+            return;
+          }
+          if (n.listing_id && openDetail) {
+            fetchListingDetail(n.listing_id).then(data => {
+              if (data) openDetail({
+                ...data,
+                _scrollToQA: n.type === "question" || n.type === "answer"
+              }, "notifications");
+            });
           }
         }} style={sx.s1(DC, n)}>
             <div style={sx.s2}>{notifIcon(n.type)}</div>
