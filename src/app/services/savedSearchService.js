@@ -5,6 +5,21 @@
 
 import { getSupabase } from "../../shared/services/supabaseClient.js";
 
+function normalizeSavedSearchType(value) {
+  if (value === "للبيع" || value === "sell") return "sell";
+  if (value === "للإيجار" || value === "rent" || value === "lease" || value === "تأجير") return "rent";
+  if (value === "want_buy" || value === "مطلوب شراء") return "want_buy";
+  if (value === "want_rent" || value === "مطلوب للإيجار" || value === "مطلوب إيجار") return "want_rent";
+  return value || null;
+}
+
+function normalizeSavedSearchRow(row = {}) {
+  return {
+    ...row,
+    type: normalizeSavedSearchType(row.type)
+  };
+}
+
 /**
  * جلب كل البحوث المحفوظة لمستخدم (الأحدث أولاً)
  */
@@ -70,7 +85,8 @@ export async function deleteSavedSearch(searchId) {
  */
 export async function createSavedSearch(row) {
   const sb = getSupabase();
-  const result = await sb.from("saved_searches").insert(row).select().single();
+  const normalizedRow = normalizeSavedSearchRow(row);
+  const result = await sb.from("saved_searches").insert(normalizedRow).select().single();
 
   if (!result?.error) return result;
 
@@ -83,16 +99,16 @@ export async function createSavedSearch(row) {
   if (!mayBeSchemaMismatch) return result;
 
   const fallback = {
-    user_id: row.user_id,
-    query: row.query,
-    city: row.city ?? null,
-    district: row.district ?? null,
-    type: row.type ?? null,
-    category: row.category ?? null,
-    min_price: row.min_price ?? null,
-    max_price: row.max_price ?? null,
-    ownership_type: row.ownership_type ?? null,
-    notif: row.notif ?? true
+    user_id: normalizedRow.user_id,
+    query: normalizedRow.query,
+    city: normalizedRow.city ?? null,
+    district: normalizedRow.district ?? null,
+    type: normalizedRow.type ?? null,
+    category: normalizedRow.category ?? null,
+    min_price: normalizedRow.min_price ?? null,
+    max_price: normalizedRow.max_price ?? null,
+    ownership_type: normalizedRow.ownership_type ?? null,
+    notif: normalizedRow.notif ?? true
   };
 
   return sb.from("saved_searches").insert(fallback).select().single();
