@@ -15,6 +15,30 @@ function toNumber(value, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+
+function normalizeTypeForFilter(value) {
+  const v = String(value || "").trim();
+  if (v === "sell" || v === "بيع" || v === "للبيع") return "sell";
+  if (v === "rent" || v === "lease" || v === "إيجار" || v === "ايجار" || v === "للإيجار" || v === "للايجار") return "rent";
+  if (v === "want_buy" || v === "مطلوب شراء") return "want_buy";
+  if (v === "want_rent" || v === "مطلوب إيجار" || v === "مطلوب ايجار" || v === "مطلوب للإيجار") return "want_rent";
+  return "all";
+}
+
+function normalizeCategoryForFilter(value) {
+  const v = String(value || "").trim();
+  if (!v || v === "الكل") return "";
+  if (v === "محل") return "محل تجاري";
+  return v;
+}
+
+function sameCategoryForFilter(listingCategory, filterCategory) {
+  const a = normalizeCategoryForFilter(listingCategory);
+  const b = normalizeCategoryForFilter(filterCategory);
+  if (!b) return true;
+  return a === b;
+}
+
 function getListingArea(listing) {
   return toNumber(
     listing?.net_area ??
@@ -106,10 +130,8 @@ export function applyListingFilters(listings, {
 
   let list = listings.filter(l => {
     // ── نوع الإعلان ──
-    if (activeType === "للبيع"     && l.type !== "sell")      return false;
-    if (activeType === "للإيجار"   && l.type !== "rent")      return false;
-    if (activeType === "want_buy"  && l.type !== "want_buy")  return false;
-    if (activeType === "want_rent" && l.type !== "want_rent") return false;
+    const wantedType = normalizeTypeForFilter(activeType);
+    if (wantedType !== "all" && l.type !== wantedType) return false;
 
     // ── الموقع ──
     if (activeCity     !== "الكل" && l.city     !== activeCity)     return false;
@@ -128,7 +150,7 @@ export function applyListingFilters(listings, {
     if (filters.maxArea && totalArea > Number(filters.maxArea)) return false;
 
     // ── الفئة ──
-    if (filters.category && filters.category !== "الكل" && l.category !== filters.category) return false;
+    if (filters.category && filters.category !== "الكل" && !sameCategoryForFilter(l.category, filters.category)) return false;
 
     // ── الغرف ──
     if (filters.beds && filters.beds !== "الكل") {
