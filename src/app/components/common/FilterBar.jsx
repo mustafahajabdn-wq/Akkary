@@ -52,6 +52,13 @@ function getActiveTypeKey(value) {
   return "all";
 }
 
+function normalizeCategoryKey(value) {
+  const v = String(value || "").trim();
+  if (!v || v === "الكل") return "";
+  if (v === "محل") return "محل تجاري";
+  return v;
+}
+
 const ACTIVE_TYPE_STORAGE_KEY = "aqari_active_type";
 
 // =====================================================================
@@ -386,7 +393,7 @@ function QuickFilters({ activeType, setActiveType, filters = {}, setFilters }) {
       {quickItems.map(item => {
         const isActive = item.key === "new"
           ? item.active
-          : activeType === item.type && filters.category === item.category;
+          : getActiveTypeKey(activeType) === getActiveTypeKey(item.type) && normalizeCategoryKey(filters.category) === normalizeCategoryKey(item.category);
 
         return (
           <button
@@ -697,7 +704,7 @@ function FilterBar({
             key={v}
             DC={DC}
             size="md"
-            active={(filters.category || "الكل") === v}
+            active={normalizeCategoryKey(filters.category || "الكل") === normalizeCategoryKey(v)}
             onClick={() => {
               setFilters(f => ({ ...f, category: v }));
               closeSheet();
