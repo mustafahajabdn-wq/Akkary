@@ -37,7 +37,7 @@ export async function fetchPropertyFieldOptions(keys = []) {
 
 const FALLBACK_LISTING_COLUMNS = [
   "title", "description", "price", "currency", "type", "category", "city", "district", "village",
-  "status", "admin_status", "views", "phone", "phone2", "whatsapp", "whatsapp2", "area", "rooms",
+  "status", "admin_status", "views", "phone", "phone2", "whatsapp", "whatsapp2", "rooms",
   "beds", "floor", "lat", "lng", "location_detail", "extra_fields", "rejection_reason", "sort_order",
   "expires_at", "external_url", "total_area", "net_area", "land_area", "build_area", "baths",
   "total_floors", "ownership", "furnished", "finishing", "condition", "heating", "kitchen",
