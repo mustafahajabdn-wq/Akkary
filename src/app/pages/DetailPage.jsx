@@ -19,6 +19,22 @@ import { trackPropertyView, trackContactClick } from "../../shared/services/meta
 import { DS, getDetailStyles } from "./DetailPage.styles.js";
 import DetailInfoTab from "./DetailInfoTab.jsx";
 
+
+function toWhatsAppNumber(value) {
+  let n = String(value || "").trim();
+
+  n = n.replace(/[^\d+]/g, "");
+  if (n.startsWith("+")) n = n.slice(1);
+  n = n.replace(/\D/g, "");
+
+  if (n.startsWith("00")) n = n.slice(2);
+  if (n.startsWith("963")) return n;
+  if (n.startsWith("09")) return "963" + n.slice(1);
+  if (n.startsWith("9") && n.length === 9) return "963" + n;
+
+  return n;
+}
+
 function DetailPage({
   item: itemProp,
   setPage,
@@ -1156,7 +1172,14 @@ function DetailPage({
                 <button
                   onClick={() => {
                     trackContactClick(item, "whatsapp");
-                    window.open("https://wa.me/" + ph.replace(/[^0-9]/g, ""), "_blank");
+                    const waNumber = toWhatsAppNumber(ph);
+
+                    if (!waNumber) {
+                      alert("رقم الواتساب غير صحيح");
+                      return;
+                    }
+
+                    window.open("https://wa.me/" + waNumber, "_blank", "noopener,noreferrer");
 
                     if (item?.id) incrementWhatsappClicks(item.id);
                   }}
