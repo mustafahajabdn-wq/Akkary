@@ -36,7 +36,7 @@ async function fetchActiveListings() {
   const today = new Date().toISOString().slice(0, 10);
 
   const params = new URLSearchParams();
-  params.set("select", "id,created_at");
+  params.set("select", "id,created_at,updated_at");
   params.set("status", "eq.active");
   params.set("admin_status", "eq.approved");
   params.set("or", `(expires_at.is.null,expires_at.gte.${today})`);
@@ -67,16 +67,15 @@ export default async function handler(req, res) {
     const listings = await fetchActiveListings();
 
     const staticUrls = [
-      // / redirects to /home in AppShell.routes.jsx, so keep only /home
-      // in the sitemap to avoid duplicate homepage URLs in Google.
-      sitemapUrl(`${SITE_URL}/home`, null, "1.0"),
+      sitemapUrl(`${SITE_URL}/`, null, "1.0"),
       sitemapUrl(`${SITE_URL}/search`, null, "0.9"),
     ];
 
     const listingUrls = listings
       .filter((item) => item?.id)
       .map((item) => {
-        return sitemapUrl(`${SITE_URL}/listing/${item.id}`, item.created_at || null, "0.8");
+        const lastmod = item.updated_at || item.created_at || null;
+        return sitemapUrl(`${SITE_URL}/listing/${item.id}`, lastmod, "0.8");
       });
 
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -96,7 +95,7 @@ ${listingUrls.join("\n")}
 
     const fallbackXml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${sitemapUrl(`${SITE_URL}/home`, null, "1.0")}
+${sitemapUrl(`${SITE_URL}/`, null, "1.0")}
 ${sitemapUrl(`${SITE_URL}/search`, null, "0.9")}
 </urlset>`;
 
