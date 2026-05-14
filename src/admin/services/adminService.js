@@ -335,6 +335,270 @@ export async function getAdminDashboardStats() {
   };
 }
 
+
+function normalizeListingTypeForMatch(value) {
+  if (value === "للبيع" || value === "sell") return "sell";
+  if (value === "للإيجار" || value === "rent" || value === "lease" || value === "تأجير") return "rent";
+  if (value === "want_buy" || value === "مطلوب شراء") return "want_buy";
+  if (value === "want_rent" || value === "مطلوب للإيجار" || value === "مطلوب إيجار") return "want_rent";
+  return value ? String(value).trim() : "";
+}
+
+function hasSavedSearchValue(value) {
+  if (Array.isArray(value)) return value.length > 0;
+  return value !== undefined && value !== null && String(value).trim() !== "" && String(value).trim() !== "الكل";
+}
+
+function safeJsonObject(value) {
+  if (!value) return {};
+  if (typeof value === "object" && !Array.isArray(value)) return value;
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
+
+function toFiniteNumber(value) {
+  if (value === undefined || value === null || value === "") return null;
+  const normalized = String(value).replace(/[٬,]/g, "").trim();
+  if (!normalized) return null;
+  const n = Number(normalized);
+  return Number.isFinite(n) ? n : null;
+}
+
+function getListingAreaForMatch(listing) {
+  const extra = safeJsonObject(listing?.extra_fields);
+  return toFiniteNumber(
+    listing?.total_area ??
+    listing?.area ??
+    listing?.net_area ??
+    listing?.land_area ??
+    listing?.build_area ??
+    extra.total_area ??
+    extra.area
+  );
+}
+
+function normalizeListFilter(value) {
+  if (Array.isArray(value)) return value.map(v => String(v).trim()).filter(Boolean);
+  if (!hasSavedSearchValue(value)) return [];
+  return String(value)
+    .split(/[،,]/)
+    .map(v => v.trim())
+    .filter(Boolean);
+}
+
+function textFilterMatches(filterValue, listingValue) {
+  if (!hasSavedSearchValue(filterValue)) return true;
+  return String(listingValue ?? "").trim() === String(filterValue).trim();
+}
+
+function getListingFloorForMatch(listing) {
+  const extra = safeJsonObject(listing?.extra_fields);
+  const value = listing?.floor ?? extra.floor;
+  if (value === 0 || value === "0") return "0";
+  if (value === undefined || value === null || value === "") return "";
+  return String(value).trim();
+}
+
+function expandFacingForMatch(value) {
+  const raw = String(value || "").trim();
+  const variants = {
+    "شمالي": ["شمال", "شمالي"],
+    "شمال": ["شمال", "شمالي"],
+    "جنوبي": ["جنوب", "جنوبي", "قبلي"],
+    "جنوب": ["جنوب", "جنوبي", "قبلي"],
+    "قبلي": ["جنوب", "جنوبي", "قبلي"],
+    "شرقي": ["شرق", "شرقي"],
+    "شرق": ["شرق", "شرقي"],
+    "غربي": ["غرب", "غربي"],
+    "غرب": ["غرب", "غربي"],
+    "شمال شرقي": ["شمال شرق", "شمال شرقي"],
+    "شمال شرق": ["شمال شرق", "شمال شرقي"],
+    "شمال غربي": ["شمال غرب", "شمال غربي"],
+    "شمال غرب": ["شمال غرب", "شمال غربي"],
+    "جنوب شرقي": ["جنوب شرق", "جنوب شرقي"],
+    "جنوب شرق": ["جنوب شرق", "جنوب شرقي"],
+    "جنوب غربي": ["جنوب غرب", "جنوب غربي"],
+    "جنوب غرب": ["جنوب غرب", "جنوب غربي"]
+  };
+
+  return variants[raw] || [raw];
+}
+
+function facingFilterMatches(searchFacing, listing) {
+  const selected = normalizeListFilter(searchFacing);
+  if (!selected.length) return true;
+
+  const extra = safeJsonObject(listing?.extra_fields);
+  const listingFacing = String(
+    listing?.facing_dir ??
+    listing?.facing ??
+    extra.facing_dir ??
+    extra.facing ??
+    ""
+  ).trim();
+
+  if (!listingFacing) return false;
+
+  const candidates = selected.flatMap(expandFacingForMatch).filter(Boolean);
+  return candidates.some(v => listingFacing.includes(v));
+}
+
+function floorFilterMatches(searchFloor, listing) {
+  const floors = normalizeListFilter(searchFloor);
+  if (!floors.length) return true;
+  const listingFloor = getListingFloorForMatch(listing);
+  return !!listingFloor && floors.includes(listingFloor);
+}
+
+function ownershipFilterMatches(searchOwnership, listing) {
+  if (!hasSavedSearchValue(searchOwnership)) return true;
+  const extra = safeJsonObject(listing?.extra_fields);
+  const listingOwnership = String(listing?.ownership ?? extra.ownership ?? "").trim();
+  if (!listingOwnership) return false;
+  const needle = String(searchOwnership).split("(")[0].trim();
+  return !needle || listingOwnership.includes(needle);
+}
+
+function numberRangeMatches({ min, max, value }) {
+  const hasMin = hasSavedSearchValue(min);
+  const hasMax = hasSavedSearchValue(max);
+  if (!hasMin && !hasMax) return true;
+  if (value === null) return false;
+
+  const minNum = toFiniteNumber(min);
+  const maxNum = toFiniteNumber(max);
+
+  if (minNum !== null && value < minNum) return false;
+  if (maxNum !== null && value > maxNum) return false;
+  return true;
+}
+
+function savedSearchHasStructuredFilters(search) {
+  return [
+    "city",
+    "district",
+    "village",
+    "type",
+    "category",
+    "min_price",
+    "max_price",
+    "min_area",
+    "max_area",
+    "currency",
+    "floor",
+    "facing",
+    "beds",
+    "ownership_type"
+  ].some(key => hasSavedSearchValue(search?.[key]));
+}
+
+function savedSearchMatchesListing(search, listing) {
+  if (!search?.user_id || search.notif === false || search.notif === "false") return false;
+  if (!savedSearchHasStructuredFilters(search)) return false;
+
+  if (!textFilterMatches(search.city, listing.city)) return false;
+  if (!textFilterMatches(search.district, listing.district)) return false;
+  if (!textFilterMatches(search.village, listing.village)) return false;
+  if (!textFilterMatches(search.category, listing.category)) return false;
+  if (!textFilterMatches(search.currency, listing.currency)) return false;
+
+  const searchType = normalizeListingTypeForMatch(search.type);
+  const listingType = normalizeListingTypeForMatch(listing.type);
+  if (searchType && searchType !== "الكل" && searchType !== listingType) return false;
+
+  const listingPrice = toFiniteNumber(listing.price ?? listing.priceNum);
+  if (!numberRangeMatches({ min: search.min_price, max: search.max_price, value: listingPrice })) return false;
+
+  const listingArea = getListingAreaForMatch(listing);
+  if (!numberRangeMatches({ min: search.min_area, max: search.max_area, value: listingArea })) return false;
+
+  if (!floorFilterMatches(search.floor, listing)) return false;
+  if (!facingFilterMatches(search.facing, listing)) return false;
+  if (!ownershipFilterMatches(search.ownership_type, listing)) return false;
+
+  if (hasSavedSearchValue(search.beds)) {
+    const wantedBeds = String(search.beds).trim();
+    const listingRooms = toFiniteNumber(listing.rooms ?? listing.beds);
+    if (wantedBeds === "5+") {
+      if (listingRooms === null || listingRooms < 5) return false;
+    } else if (listingRooms !== toFiniteNumber(wantedBeds)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function listingTypeArabic(type) {
+  const t = normalizeListingTypeForMatch(type);
+  if (t === "sell") return "للبيع";
+  if (t === "rent") return "للإيجار";
+  if (t === "want_buy") return "مطلوب شراء";
+  if (t === "want_rent") return "مطلوب للإيجار";
+  return "";
+}
+
+function buildListingMatchNotification(search, listing) {
+  const listingTitle = listing?.title || [listingTypeArabic(listing?.type), listing?.category, listing?.city, listing?.district]
+    .filter(Boolean)
+    .join(" · ") || "إعلان جديد";
+  const queryTitle = search?.query ? `«${String(search.query).slice(0, 80)}»` : "بحثك المحفوظ";
+  const text = `🔔 إعلان جديد يطابق ${queryTitle}: ${listingTitle}`;
+
+  return {
+    user_id: search.user_id,
+    type: "listing_match",
+    text: text.slice(0, 280),
+    is_read: false,
+    data: {
+      listing_id: listing.id,
+      saved_search_id: search.id || null,
+      url: `/listing/${listing.id}`
+    }
+  };
+}
+
+async function notifySavedSearchMatchesForListing(listing) {
+  if (!listing?.id) return { matched: 0 };
+
+  const status = listing.status || "active";
+  const adminStatus = listing.admin_status || "approved";
+  if (status !== "active" || adminStatus !== "approved") return { matched: 0 };
+
+  const savedSearches = await adminGet("/rest/v1/saved_searches?notif=eq.true&select=*&limit=5000", []);
+  const matches = (Array.isArray(savedSearches) ? savedSearches : [])
+    .filter(search => savedSearchMatchesListing(search, listing));
+
+  if (!matches.length) return { matched: 0 };
+
+  const rows = matches.map(search => buildListingMatchNotification(search, listing));
+  await adminPost("/rest/v1/notifications", rows, {
+    prefer: "return=minimal"
+  });
+
+  await Promise.allSettled(
+    rows.map(row => adminInvokeFunction(
+      "send-push",
+      {
+        user_id: row.user_id,
+        title: "عقار جديد يطابق بحثك",
+        body: row.text.replace(/^🔔\s*/, ""),
+        url: row.data.url
+      },
+      { fallback: {} }
+    ))
+  );
+
+  return { matched: rows.length };
+}
+
 export async function uploadImportedImage(file) {
   if (!file) return null;
 
@@ -350,7 +614,15 @@ export async function importListingRow(row) {
     fallback: []
   });
 
-  return Array.isArray(inserted) ? inserted[0] || null : inserted;
+  const listing = Array.isArray(inserted) ? inserted[0] || null : inserted;
+
+  try {
+    await notifySavedSearchMatchesForListing(listing);
+  } catch (error) {
+    console.warn("saved search notification skipped", error);
+  }
+
+  return listing;
 }
 
 export async function attachImportedImages(listingId, imgRows = []) {
@@ -1018,4 +1290,4 @@ export async function fetchAdminUserStats(userId) {
     reporter_count: Array.isArray(reporter) ? reporter.length : 0,
     block_count: Array.isArray(blocked) ? blocked.length : 0
   };
-                                                              }
+}
