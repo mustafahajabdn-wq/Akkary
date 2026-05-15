@@ -29,9 +29,45 @@ function cleanText(value = "", max = 170) {
     .slice(0, max);
 }
 
+function safeJsonLd(value) {
+  return JSON.stringify(value).replace(/</g, "\\u003c");
+}
+
+function getPriceNumber(listing) {
+  const n = Number(String(listing?.price || 0).replace(/,/g, ""));
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+function getPriceCurrency(listing) {
+  const cur = String(listing?.currency || "").trim().toUpperCase();
+
+  if (["USD", "SYP", "EUR", "TRY"].includes(cur)) return cur;
+
+  return "SYP";
+}
+
 function formatPrice(listing) {
-  if (!listing?.price) return "";
-  return `${listing.price} ${listing.currency || ""}`.trim();
+  const price = getPriceNumber(listing);
+  if (!price) return "";
+
+  return `${price.toLocaleString("en-US")} ${getPriceCurrency(listing)}`;
+}
+
+function getAvailability(listing) {
+  const active =
+    listing?.status === "active" &&
+    listing?.admin_status === "approved";
+
+  if (!active) return "https://schema.org/OutOfStock";
+
+  if (listing?.expires_at) {
+    const today = new Date().toISOString().slice(0, 10);
+    const expires = String(listing.expires_at).slice(0, 10);
+
+    if (expires < today) return "https://schema.org/OutOfStock";
+  }
+
+  return "https://schema.org/InStock";
 }
 
 async function fetchJson(url) {
@@ -60,7 +96,7 @@ async function fetchListing(id) {
   const params = new URLSearchParams();
   params.set(
     "select",
-    "id,title,description,price,currency,type,category,city,district,village,total_area,net_area,land_area,build_area,rooms,floor,status,admin_status,expires_at,created_at"
+    "id,title,description,price,currency,type,category,city,district,village,total_area,net_area,land_area,build_area,rooms,floor,status,admin_status,expires_at,created_at,updated_at"
   );
   params.set("id", `eq.${id}`);
   params.set("status", "eq.active");
@@ -131,12 +167,55 @@ function getListingArea(listing) {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
+function buildProductAdditionalProperties(listing) {
+  const props = [];
+
+  const area = getListingArea(listing);
+
+  if (area) {
+    props.push({
+      "@type": "PropertyValue",
+      name: "المساحة",
+      value: `${area} م²`,
+    });
+  }
+
+  if (listing?.rooms) {
+    props.push({
+      "@type": "PropertyValue",
+      name: "عدد الغرف",
+      value: String(listing.rooms),
+    });
+  }
+
+  if (listing?.floor !== null && listing?.floor !== undefined && String(listing.floor).trim() !== "") {
+    props.push({
+      "@type": "PropertyValue",
+      name: "الطابق",
+      value: String(listing.floor),
+    });
+  }
+
+  if (listing?.city || listing?.district) {
+    props.push({
+      "@type": "PropertyValue",
+      name: "الموقع",
+      value: [listing.city, listing.district, listing.village].filter(Boolean).join(" - "),
+    });
+  }
+
+  return props;
+}
+
 function buildListingSeo(listing, imageUrl = "") {
   const title = cleanText(listing.title || "إعلان عقاري", 80);
   const city = cleanText(listing.city || "", 35);
   const district = cleanText(listing.district || "", 35);
   const category = cleanText(listing.category || "", 35);
   const price = formatPrice(listing);
+  const priceValue = getPriceNumber(listing);
+  const priceCurrency = getPriceCurrency(listing);
+  const availability = getAvailability(listing);
 
   const pageTitle = `${title} - طابو أخضر`;
 
@@ -157,18 +236,52 @@ function buildListingSeo(listing, imageUrl = "") {
 
   const url = `${SITE_URL}/listing/${listing.id}`;
 
-  const jsonLd = {
-    "@context": "https://schema.org",
-    "@type": "WebPage",
-    name: pageTitle,
-    description,
+  const offer = {
+    "@type": "Offer",
     url,
-    inLanguage: "ar",
-    isPartOf: {
-      "@type": "WebSite",
-      name: "طابو أخضر",
-      url: SITE_URL,
-    },
+    availability,
+    itemCondition: "https://schema.org/UsedCondition",
+  };
+
+  if (priceValue > 0) {
+    offer.price = priceValue;
+    offer.priceCurrency = priceCurrency;
+  }
+
+  const productJsonLd = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebPage",
+        "@id": `${url}#webpage`,
+        name: pageTitle,
+        description,
+        url,
+        inLanguage: "ar",
+        isPartOf: {
+          "@type": "WebSite",
+          name: "طابو أخضر",
+          url: SITE_URL,
+        },
+      },
+      {
+        "@type": "Product",
+        "@id": `${url}#property`,
+        name: title,
+        description,
+        url,
+        image: imageUrl ? [imageUrl] : undefined,
+        category: category || "عقار",
+        brand: {
+          "@type": "Brand",
+          name: "طابو أخضر",
+        },
+        offers: offer,
+        additionalProperty: buildProductAdditionalProperties(listing),
+        datePublished: listing.created_at || undefined,
+        dateModified: listing.updated_at || listing.created_at || undefined,
+      },
+    ],
   };
 
   return `
@@ -188,7 +301,7 @@ ${imageUrl ? `<meta property="og:image" content="${escapeHtml(imageUrl)}">` : ""
 <meta name="twitter:description" content="${escapeHtml(description)}">
 ${imageUrl ? `<meta name="twitter:image" content="${escapeHtml(imageUrl)}">` : ""}
 
-<script type="application/ld+json">${JSON.stringify(jsonLd)}</script>
+<script type="application/ld+json">${safeJsonLd(productJsonLd)}</script>
 `;
 }
 
@@ -249,4 +362,4 @@ export default async function handler(req, res) {
     res.setHeader("Cache-Control", "no-store");
     res.end(htmlTemplate || "");
   }
-}
+                          }
