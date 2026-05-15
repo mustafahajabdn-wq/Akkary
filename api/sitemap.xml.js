@@ -69,6 +69,7 @@ export default async function handler(req, res) {
     const staticUrls = [
       sitemapUrl(`${SITE_URL}/`, null, "1.0"),
       sitemapUrl(`${SITE_URL}/search`, null, "0.9"),
+      sitemapUrl(`${SITE_URL}/about`, null, "0.8"),
     ];
 
     const listingUrls = listings
@@ -100,6 +101,7 @@ ${listingUrls.join("\n")}
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${sitemapUrl(`${SITE_URL}/`, null, "1.0")}
 ${sitemapUrl(`${SITE_URL}/search`, null, "0.9")}
+${sitemapUrl(`${SITE_URL}/about`, null, "0.8")}
 </urlset>`;
 
     res.setHeader("Content-Type", "application/xml; charset=utf-8");
