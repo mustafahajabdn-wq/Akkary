@@ -572,7 +572,17 @@ function applyApprovedListingsQueryFilters(query, filterInput = {}) {
     if (categoryValues.length === 1) query = query.eq("category", categoryValues[0]);
     else if (categoryValues.length > 1) query = query.in("category", categoryValues);
   }
-  if (isFilledFilterValue(advanced.currency)) query = query.eq("currency", advanced.currency);
+  const pricedOnly = advanced.pricedOnly === true || advanced.pricedOnly === "true" || advanced.priceMode === "priced";
+  const hasPriceRange = isFilledFilterValue(advanced.minPrice) || isFilledFilterValue(advanced.maxPrice);
+  const hasCurrencyFilter = isFilledFilterValue(advanced.currency);
+
+  if (hasCurrencyFilter) query = query.eq("currency", advanced.currency);
+
+  // عند تفعيل خيار "إظهار فقط الإعلانات المذكور سعرها" أو استعمال أي فلتر سعر،
+  // لا تُعرض إعلانات السعر عند التواصل لأنها مخزنة بسعر 0.
+  if (pricedOnly || hasPriceRange || hasCurrencyFilter) {
+    query = query.gt("price", 0);
+  }
 
   if (isFilledFilterValue(advanced.minPrice)) query = query.gte("price", Number(advanced.minPrice));
   if (isFilledFilterValue(advanced.maxPrice)) query = query.lte("price", Number(advanced.maxPrice));
@@ -675,4 +685,4 @@ export function subscribeToListingsChanges(onChange) {
     .subscribe();
 
   return () => sb.removeChannel(ch);
-    }
+                  }
