@@ -671,9 +671,9 @@ function ProfilePage({
       action: "help"
     },
     {
-      icon: "📱",
-      label: "الإصدار",
-      value: "1.0.0 Beta"
+      icon: "ℹ️",
+      label: "حول طابو أخضر",
+      action: "about"
     },
     {
       icon: "🔐",
