@@ -67,7 +67,7 @@ export default async function handler(req, res) {
     const listings = await fetchActiveListings();
 
     const staticUrls = [
-      sitemapUrl(`${SITE_URL}/home`, null, "1.0"),
+      sitemapUrl(`${SITE_URL}/`, null, "1.0"),
       sitemapUrl(`${SITE_URL}/search`, null, "0.9"),
     ];
 
@@ -98,7 +98,7 @@ ${listingUrls.join("\n")}
 
     const fallbackXml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${sitemapUrl(`${SITE_URL}/home`, null, "1.0")}
+${sitemapUrl(`${SITE_URL}/`, null, "1.0")}
 ${sitemapUrl(`${SITE_URL}/search`, null, "0.9")}
 </urlset>`;
 
