@@ -489,19 +489,29 @@ function FilterBar({
   // السعر
   const priceCurrency = filters.currency || "الكل";
   const priceCurrencyLabel = priceCurrency === "USD" ? "دولار" : priceCurrency === "SYP" ? "ليرة" : "";
-  const hasPriceFilter = !!(filters.minPrice || filters.maxPrice || priceCurrencyLabel);
+  const pricedOnly = filters.pricedOnly === true || filters.pricedOnly === "true" || filters.priceMode === "priced";
+  const pricedOnlyLabel = pricedOnly ? "السعر مذكور" : "";
+  const hasPriceFilter = !!(filters.minPrice || filters.maxPrice || priceCurrencyLabel || pricedOnlyLabel);
   const pricePillLabel = hasPriceFilter
     ? [
+        pricedOnlyLabel,
         filters.minPrice || filters.maxPrice
           ? (filters.minPrice || "0") + "—" + (filters.maxPrice || "∞")
-          : "السعر",
+          : "",
         priceCurrencyLabel
       ].filter(Boolean).join(" · ")
     : "السعر";
 
   const togglePriceCurrency = value => setFilters(f => ({
     ...f,
+    priceMode: "",
     currency: (f.currency || "الكل") === value ? "الكل" : value
+  }));
+
+  const togglePricedOnly = () => setFilters(f => ({
+    ...f,
+    priceMode: "",
+    pricedOnly: !(f.pricedOnly === true || f.pricedOnly === "true" || f.priceMode === "priced")
   }));
 
   // المساحة
@@ -569,7 +579,7 @@ function FilterBar({
     ],
     [
       "price", pricePillLabel, hasPriceFilter,
-      () => setFilters(f => ({ ...f, minPrice: "", maxPrice: "", currency: "الكل" }))
+      () => setFilters(f => ({ ...f, minPrice: "", maxPrice: "", currency: "الكل", pricedOnly: false, priceMode: "" }))
     ],
     [
       "area", areaPillLabel, hasAreaFilter,
@@ -819,7 +829,11 @@ function FilterBar({
             <input
               key={key}
               value={filters[key] || ""}
-              onChange={e => setFilters(f => ({ ...f, [key]: e.target.value }))}
+              onChange={e => setFilters(f => ({
+                ...f,
+                priceMode: "",
+                [key]: e.target.value
+              }))}
               placeholder={label}
               type="number"
               inputMode="numeric"
@@ -861,6 +875,25 @@ function FilterBar({
           })}
         </div>
 
+        <div style={{ marginBottom: 10 }}>
+          <FilterPill
+            DC={DC}
+            size="block"
+            minHeight={42}
+            idleBg={DC.bg}
+            active={pricedOnly}
+            onClick={togglePricedOnly}
+            style={{
+              width: "100%",
+              borderRadius: 16,
+              fontSize: 14,
+              fontWeight: 900
+            }}
+          >
+            {pricedOnly ? "✓ " : ""}إظهار فقط الإعلانات المذكور سعرها
+          </FilterPill>
+        </div>
+
         <div style={{
           display: "grid",
           gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
@@ -878,7 +911,7 @@ function FilterBar({
                 idleBg={DC.bg}
                 active={activeRange}
                 onClick={() => {
-                  setFilters(f => ({ ...f, minPrice: mn, maxPrice: mx }));
+                  setFilters(f => ({ ...f, priceMode: "", minPrice: mn, maxPrice: mx }));
                   closeSheet();
                 }}
               >
@@ -1104,6 +1137,8 @@ function FilterBar({
                           minPrice: s.min_price || "",
                           maxPrice: s.max_price || "",
                           currency: s.currency || "الكل",
+                          pricedOnly: false,
+                          priceMode: "",
                           minArea: s.min_area || "",
                           maxArea: s.max_area || "",
                           floor: toArray(s.floor),
