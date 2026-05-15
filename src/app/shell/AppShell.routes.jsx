@@ -23,6 +23,7 @@ import MapViewPage from "../pages/MapViewPage.jsx";
 import NotificationsPage from "../pages/NotificationsPage.jsx";
 import SettingsPage from "../pages/SettingsPage.jsx";
 import HelpPage from "../pages/HelpPage.jsx";
+import AboutPage from "../pages/AboutPage.jsx";
 import PrivacyPolicyPage from "../pages/PrivacyPolicyPage.jsx";
 import AdDetailPage from "../pages/AdDetailPage.jsx";
 import FeaturedAdPage from "../pages/FeaturedAdPage.jsx";
@@ -377,6 +378,8 @@ export default function AppRoutes({
       />
 
       <Route path="/help" element={<HelpPage {...common} />} />
+
+      <Route path="/about" element={<AboutPage {...common} />} />
 
       <Route
         path="/admin/*"
