@@ -28,6 +28,7 @@ export const publicRoutePaths = {
   notifications: "/notifications",
   settings: "/settings",
   help: "/help",
+  about: "/about",
   adDetail: "/ad",
   featuredAd: "/featured-ad",
   blocked: "/blocked",
