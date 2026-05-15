@@ -47,11 +47,11 @@ export default function AuthCallbackPage() {
         requestAnimationFrame(() => {
           markGoogleUiUpdated({
             source: "auth_callback_navigate_home",
-            path: "/home",
+            path: "/",
           });
         });
 
-        navigate("/home", { replace: true });
+        navigate("/", { replace: true });
       } catch (err) {
         console.error("OAuth callback failed:", err);
         if (alive) navigate("/login", { replace: true });
