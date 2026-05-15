@@ -275,7 +275,11 @@ function applyServerFilters(query, { activeType, activeCity, activeDistrict, act
   if (locationFilter === "exact") q = q.eq("location_accuracy", "exact");
   if (locationFilter === "approx") q = q.eq("location_accuracy", "approx");
 
-  if (filters?.currency && filters.currency !== "الكل") q = q.eq("currency", filters.currency);
+  const pricedOnly = filters?.pricedOnly === true || filters?.pricedOnly === "true" || filters?.priceMode === "priced";
+  const hasPriceRange = isFilledFilterValue(filters?.minPrice) || isFilledFilterValue(filters?.maxPrice);
+  const hasCurrencyFilter = isFilledFilterValue(filters?.currency);
+
+  if (hasCurrencyFilter) q = q.eq("currency", filters.currency);
 
   if (isFilledFilterValue(filters?.category)) {
     const categoryValues = getCategoryFilterValues(filters.category);
@@ -293,6 +297,9 @@ function applyServerFilters(query, { activeType, activeCity, activeDistrict, act
   if (filters?.parking === "يوجد") q = q.eq("parking", true);
   if (filters?.parking === "لا يوجد") q = q.eq("parking", false);
 
+  // عند تفعيل خيار "إظهار فقط الإعلانات المذكور سعرها" أو استعمال أي فلتر سعر،
+  // لا تُعرض إعلانات السعر عند التواصل لأنها مخزنة بسعر 0.
+  if (pricedOnly || hasPriceRange || hasCurrencyFilter) q = q.gt("price", 0);
   if (filters?.minPrice) q = q.gte("price", Number(filters.minPrice));
   if (filters?.maxPrice) q = q.lte("price", Number(filters.maxPrice));
 
@@ -1409,4 +1416,4 @@ export default function MapViewPage({ setPage, openDetail, DC = C, user }) {
       </div>
     </div>
   );
-    }
+        }
