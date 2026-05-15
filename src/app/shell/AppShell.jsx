@@ -723,7 +723,7 @@ export default function AppShell() {
 
   const Protected = useMemo(() => ({ element }) => {
     if (!authReady) return <PageLoader />;
-    if (!user) return <Navigate to="/home" replace />;
+    if (!user) return <Navigate to="/" replace />;
     return element;
   }, [authReady, user]);
 
@@ -859,4 +859,4 @@ export default function AppShell() {
       )}
     </div>
   );
-            }
+      }
