@@ -711,7 +711,7 @@ function DetailPage({
               <div style={DS.errorText}>ربما تم حذفه أو الرابط غير صحيح</div>
               <button
                 onClick={() =>
-                  navigate("/home", {
+                  navigate("/", {
                     replace: true
                   })
                 }
