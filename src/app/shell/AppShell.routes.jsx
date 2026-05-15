@@ -81,7 +81,7 @@ export default function AppRoutes({
 }) {
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/home" replace />} />
+      <Route path="/home" element={<Navigate to="/" replace />} />
 
       <Route path="/login" element={<LoginPage {...common} setUser={setUser} />} />
 
@@ -90,7 +90,7 @@ export default function AppRoutes({
       <Route path="/privacy" element={<PrivacyPolicyPage {...common} />} />
 
       <Route
-        path="/home"
+        path="/"
         element={
           <HomePage
             {...common}
