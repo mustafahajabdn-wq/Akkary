@@ -110,6 +110,30 @@ function toNumber(value, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function formatMarkerPrice(rawPrice, currency, short = true) {
+  const cur = String(currency || "").trim().toUpperCase();
+
+  let priceDisplay = "";
+
+  if (short) {
+    priceDisplay =
+      rawPrice >= 1e6
+        ? `${(rawPrice / 1e6).toFixed(1).replace(/\.0$/, "")}M`
+        : rawPrice >= 1000
+          ? `${Math.round(rawPrice / 1000)}K`
+          : String(rawPrice);
+  } else {
+    priceDisplay = rawPrice.toLocaleString("en-US");
+  }
+
+  if (cur === "USD") return `$ ${priceDisplay}`;
+  if (cur === "SYP") return `${priceDisplay} ل.س`;
+  if (cur === "EUR") return `€ ${priceDisplay}`;
+  if (cur === "TRY") return `₺ ${priceDisplay}`;
+
+  return currency ? `${priceDisplay} ${currency}` : priceDisplay;
+}
+
 /**
  * تشغيل حركة ظهور الماركر بعد إضافته إلى الخريطة.
  */
@@ -155,29 +179,11 @@ export function createPriceMarkerIcon(L, item, options = {}) {
   const bg = getMarkerColor(item?.type);
   const label = getTypeLabel(item?.type);
 
-  const rawP =
-    parseFloat(String(item?.price ?? item?.priceNum ?? 0).replace(/,/g, "")) ||
-    0;
+  const rawP = toNumber(item?.price ?? item?.priceNum ?? 0, 0);
 
-  let priceDisplay;
-
-  if (short) {
-    priceDisplay =
-      rawP > 0
-        ? rawP >= 1e6
-          ? `${(rawP / 1e6).toFixed(1).replace(/\.0$/, "")}M`
-          : rawP >= 1000
-            ? `${Math.round(rawP / 1000)}K`
-            : String(rawP)
-        : "";
-  } else {
-    priceDisplay =
-      rawP > 0
-        ? `${rawP.toLocaleString()} ${item?.currency || ""}`.trim()
-        : "";
-  }
-
-  const priceText = rawP > 0 ? `$ ${priceDisplay}` : "💬";
+  const priceText = rawP > 0
+    ? formatMarkerPrice(rawP, item?.currency, short)
+    : "💬";
 
   const pulseHTML = approx
     ? `<div style="position:absolute;top:50%;left:50%;width:36px;height:36px;border-radius:50%;background:${bg};opacity:.35;animation:mapPulse 2s ease-out infinite;"></div>
@@ -214,7 +220,7 @@ export function createPriceMarkerIcon(L, item, options = {}) {
       ">
         <span style="font-size:9.5px;opacity:.75;">${label}</span>
         <span style="width:1px;height:10px;background:rgba(255,255,255,.25);display:inline-block;"></span>
-        <span style="font-size:12px;font-weight:700;">${priceText}</span>
+        <span style="font-size:12px;font-weight:700;direction:ltr;unicode-bidi:plaintext;">${priceText}</span>
         <div style="
           position:absolute;
           bottom:-6px;
