@@ -140,7 +140,14 @@ export function applyListingFilters(listings, {
 
     // ── العملة والسعر ──
     const priceNum = toNumber(l.priceNum ?? l.price, 0);
-    if (filters.currency && filters.currency !== "الكل" && l.currency !== filters.currency) return false;
+    const pricedOnly = filters.pricedOnly === true || filters.pricedOnly === "true" || filters.priceMode === "priced";
+    const hasPriceRange = !!(filters.minPrice || filters.maxPrice);
+    const hasCurrencyFilter = !!(filters.currency && filters.currency !== "الكل");
+
+    // عند تفعيل خيار "إظهار فقط الإعلانات المذكور سعرها" أو استعمال أي فلتر سعر،
+    // لا تُعرض إعلانات السعر عند التواصل لأنها مخزنة بسعر 0.
+    if ((pricedOnly || hasPriceRange || hasCurrencyFilter) && priceNum <= 0) return false;
+    if (hasCurrencyFilter && l.currency !== filters.currency) return false;
     if (filters.minPrice && priceNum < Number(filters.minPrice)) return false;
     if (filters.maxPrice && priceNum > Number(filters.maxPrice)) return false;
 
