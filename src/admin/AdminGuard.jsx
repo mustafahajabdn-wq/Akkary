@@ -46,7 +46,7 @@ export default function AdminGuard({ element, user, pageName, refreshUserRoleAcc
   }, [pageName, refreshUserRoleAccess, needsAccessRefresh]);
 
   if (!authReady) return <PageLoader />;
-  if (!user) return <Navigate to="/home" replace />;
+  if (!user) return <Navigate to="/" replace />;
   if (needsAccessRefresh && (!guardChecked || accessSyncing)) return <PageLoader />;
   if (!canAccessAdminPage(user, pageName)) return <Navigate to={getFirstAllowedAdminRoute(user)} replace />;
 
