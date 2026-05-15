@@ -30,6 +30,22 @@ function AboutPage({ setPage, DC }) {
       maxWidth: 820,
       margin: "0 auto",
     },
+    logoWrap: {
+      width: 120,
+      height: 120,
+      borderRadius: 28,
+      overflow: "hidden",
+      background: "rgba(255,255,255,0.12)",
+      border: "1px solid rgba(255,255,255,0.2)",
+      boxShadow: "0 12px 30px rgba(0,0,0,0.22)",
+      margin: "0 auto 14px",
+    },
+    logoImage: {
+      width: "100%",
+      height: "100%",
+      objectFit: "cover",
+      display: "block",
+    },
     backButton: {
       border: "none",
       background: "rgba(255,255,255,0.16)",
@@ -158,6 +174,10 @@ function AboutPage({ setPage, DC }) {
           <button type="button" onClick={() => setPage?.("profile")} style={sx.backButton}>
             → رجوع
           </button>
+
+          <div style={sx.logoWrap}>
+            <img src="/images/about-logo.jpg" alt="طابو أخضر" style={sx.logoImage} />
+          </div>
 
           <div style={sx.badge}>🌿 تطبيق عقاري في سوريا</div>
           <h1 style={sx.title}>حول طابو أخضر</h1>
