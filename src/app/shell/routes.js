@@ -8,7 +8,7 @@ export const publicRoutePaths = {
   login: "/login",
   terms: "/terms",
   privacy: "/privacy",
-  home: "/home",
+  home: "/",
   detail: "/listing",
   search: "/search",
   addChoice: "/add-choice",
