@@ -7,7 +7,7 @@ import { ADMIN_ROLES, LIMITED_ADMIN_ROLES } from "../../shared/constants/access.
 import { ADMIN_ID } from "../../shared/utils/env.js";
 import { loadAppData, loadCitiesFromDB } from "../../shared/utils/geo.js";
 import { fetchUserFavorites, fetchUserFollows, fetchMyListings, updateLastSeen, upsertFollow, toggleFollowDB, toggleFavDB } from "../services/userService.js";
-import { fetchProfile, liftSuspensionIfExpired, fetchRolePermissions, upsertProfile, fetchUnreadNotificationsCount, fetchUnreadMessagesCount, subscribeToNotifications, subscribeToUnreadMessages, updateShamcash as updateShamcashDB } from "../services/profileService.js";
+import { fetchProfile, liftSuspensionIfExpired, fetchRolePermissions, createProfileIfMissing, fetchUnreadNotificationsCount, fetchUnreadMessagesCount, subscribeToNotifications, subscribeToUnreadMessages, updateShamcash as updateShamcashDB } from "../services/profileService.js";
 import { BottomNav } from "../../shared/components/common/BottomNav.jsx";
 import { buildOptimisticUser, getCurrentSession, markGoogleSessionAvailable, markGoogleUiUpdated, subscribeToAuthStateChange } from "../services/authService.js";
 import { fetchApprovedListingsPage, subscribeToListingsChanges } from "../services/listingService.js";
@@ -311,13 +311,24 @@ export default function AppShell() {
             u.email?.split("@")[0] ||
             "مستخدم";
 
-          const freshProfile = await upsertProfile(u.id, {
+          // مهم جدًا:
+          // لا نستخدم upsert هنا؛ لأن أي فشل مؤقت في fetchProfile أثناء TOKEN_REFRESHED
+          // قد يجعل التطبيق يظن أن البروفايل غير موجود، ثم يكتب الاسم القديم
+          // ويعيد account_type إلى individual. لذلك ننشئ البروفايل فقط إذا كان غير موجود فعلًا.
+          const freshProfile = await createProfileIfMissing(u.id, {
             name: profileName,
             account_type: "individual",
             terms_accepted_at: new Date().toISOString()
           });
 
-          if (!alive || !freshProfile) return;
+          if (!alive) return;
+
+          // إذا لم نستطع تحميل/إنشاء البروفايل، نترك بيانات المستخدم الحالية كما هي
+          // ولا نكتب أي قيمة افتراضية فوق الاسم أو نوع الحساب.
+          if (!freshProfile) {
+            console.warn("Profile was not loaded or created; keeping current user state.");
+            return;
+          }
 
           const nextUser = buildResolvedUser(u, freshProfile);
 
@@ -723,7 +734,7 @@ export default function AppShell() {
 
   const Protected = useMemo(() => ({ element }) => {
     if (!authReady) return <PageLoader />;
-    if (!user) return <Navigate to="/" replace />;
+    if (!user) return <Navigate to="/home" replace />;
     return element;
   }, [authReady, user]);
 
@@ -859,4 +870,4 @@ export default function AppShell() {
       )}
     </div>
   );
-      }
+}
