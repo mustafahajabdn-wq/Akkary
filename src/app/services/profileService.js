@@ -67,15 +67,15 @@ export async function fetchProfile(userId, { refresh = false } = {}) {
     .from("profiles")
     .select("*")
     .eq("id", userId)
-    .single()
+    .maybeSingle()
     .then(({ data, error }) => {
       if (error) {
         console.error("fetchProfile error:", error);
         return null;
       }
 
-      setProfileCache(userId, data);
-      return data;
+      if (data) setProfileCache(userId, data);
+      return data || null;
     })
     .finally(() => {
       profilePromises.delete(userId);
@@ -208,6 +208,44 @@ export async function liftSuspensionIfExpired(userId, suspendedUntil) {
  */
 export async function fetchRolePermissions(role) {
   return (await loadRolePermissions(role)) || [];
+}
+
+/**
+ * إنشاء profile فقط إذا لم يكن موجودًا.
+ * لا تستخدم upsert هنا حتى لا نعيد الاسم أو نوع الحساب إلى قيم افتراضية
+ * عند فشل جلب مؤقت أو تجديد جلسة TOKEN_REFRESHED.
+ */
+export async function createProfileIfMissing(userId, data = {}) {
+  if (!userId) return null;
+
+  const sb = getSupabase();
+  if (!sb) return null;
+
+  const existing = await fetchProfile(userId, { refresh: true });
+  if (existing) return existing;
+
+  const { data: result, error } = await sb
+    .from("profiles")
+    .insert({
+      id: userId,
+      ...data,
+    })
+    .select("*")
+    .single();
+
+  if (error) {
+    // إذا كان البروفايل أُنشئ في نفس اللحظة من جلسة/تبويب آخر، لا نكتب فوقه.
+    if (error.code === "23505") {
+      return await fetchProfile(userId, { refresh: true });
+    }
+
+    console.error("createProfileIfMissing error:", error);
+    return null;
+  }
+
+  setProfileCache(userId, result);
+  sellerProfileCache.delete(userId);
+  return result;
 }
 
 /**
