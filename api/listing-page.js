@@ -12,6 +12,17 @@ const SUPABASE_KEY =
   process.env.SUPABASE_ANON_KEY ||
   process.env.VITE_SUPABASE_ANON_KEY;
 
+function toAbsoluteUrl(value = "") {
+  const text = String(value || "").trim();
+  if (!text) return "";
+
+  if (/^https?:\/\//i.test(text)) return text;
+  if (text.startsWith("//")) return `https:${text}`;
+  if (text.startsWith("/")) return `${SITE_URL}${text}`;
+
+  return `${SITE_URL}/${text.replace(/^\.?\//, "")}`;
+}
+
 function escapeHtml(value = "") {
   return String(value || "")
     .replaceAll("&", "&amp;")
@@ -118,7 +129,8 @@ async function fetchListingImage(id) {
     params.set("limit", "1");
 
     const rows = await fetchJson(`${SUPABASE_URL}/rest/v1/listing_images?${params.toString()}`);
-    return Array.isArray(rows) ? rows[0]?.url || rows[0]?.image_url || "" : "";
+    const row = Array.isArray(rows) ? rows[0] : null;
+    return toAbsoluteUrl(row?.url || row?.image_url || row?.path || "");
   } catch {
     return "";
   }
@@ -215,10 +227,6 @@ function buildListingSeo(listing, imageUrl = "") {
   const district = cleanText(listing.district || "", 35);
   const category = cleanText(listing.category || "", 35);
   const price = formatPrice(listing);
-  const priceValue = getPriceNumber(listing);
-  const priceCurrency = getPriceCurrency(listing);
-  const availability = getAvailability(listing);
-
   const pageTitle = `${title} - طابو أخضر`;
 
   const fallbackDescription = [
@@ -238,18 +246,9 @@ function buildListingSeo(listing, imageUrl = "") {
 
   const url = `${SITE_URL}/listing/${listing.id}`;
 
-  const offer = {
-    "@type": "Offer",
-    url,
-    availability,
-    itemCondition: "https://schema.org/UsedCondition",
-  };
-
-  if (priceValue > 0) {
-    offer.price = priceValue;
-    offer.priceCurrency = priceCurrency;
-  }
-
+  // لا نستخدم Product schema للإعلانات العقارية؛ لأنه يجعل Google يعامل الصفحة كـ Merchant listing،
+  // وعند غياب صورة منتج/شحن/سياسة إرجاع تظهر أخطاء Rich Results غير مناسبة للعقارات.
+  // نُبقي البيانات المنظمة كـ WebPage فقط لتظل الصفحة قابلة للفهرسة بلا عنصر Merchant غير صالح.
   const productJsonLd = {
     "@context": "https://schema.org",
     "@graph": [
@@ -265,23 +264,12 @@ function buildListingSeo(listing, imageUrl = "") {
           name: "طابو أخضر",
           url: SITE_URL,
         },
-      },
-      {
-        "@type": "Product",
-        "@id": `${url}#property`,
-        name: title,
-        description,
-        url,
-        image: imageUrl ? [imageUrl] : undefined,
-        category: category || "عقار",
-        brand: {
-          "@type": "Brand",
-          name: "طابو أخضر",
-        },
-        offers: offer,
-        additionalProperty: buildProductAdditionalProperties(listing),
-        datePublished: listing.created_at || undefined,
-        dateModified: listing.updated_at || listing.created_at || undefined,
+        primaryImageOfPage: imageUrl
+          ? {
+              "@type": "ImageObject",
+              url: imageUrl,
+            }
+          : undefined,
       },
     ],
   };
@@ -344,7 +332,10 @@ export default async function handler(req, res) {
       return;
     }
 
-    const imageUrl = await fetchListingImage(id);
+    const imageUrl =
+      (await fetchListingImage(id)) ||
+      toAbsoluteUrl(listing.image_url || listing.photo || "");
+
     const seo = buildListingSeo(listing, imageUrl);
     const html = cleanedHtml.replace("</head>", `${seo}\n</head>`);
 
@@ -364,4 +355,4 @@ export default async function handler(req, res) {
     res.setHeader("Cache-Control", "no-store");
     res.end(htmlTemplate || "");
   }
-        }
+}
