@@ -71,7 +71,9 @@ function getAvailability(listing) {
 }
 
 async function fetchJson(url) {
-  if (!SUPABASE_URL || !SUPABASE_KEY) return null;
+  if (!SUPABASE_URL || !SUPABASE_KEY) {
+    throw new Error("Missing Supabase env vars");
+  }
 
   const response = await fetch(url, {
     headers: {
@@ -83,8 +85,7 @@ async function fetchJson(url) {
 
   if (!response.ok) {
     const text = await response.text().catch(() => "");
-    console.error("Supabase fetch failed:", response.status, text);
-    return null;
+    throw new Error(`Supabase fetch failed: ${response.status} ${text}`);
   }
 
   return response.json();
@@ -94,10 +95,9 @@ async function fetchListing(id) {
   const today = new Date().toISOString().slice(0, 10);
 
   const params = new URLSearchParams();
-  params.set(
-    "select",
-    "id,title,description,price,currency,type,category,city,district,village,total_area,net_area,land_area,build_area,rooms,floor,status,admin_status,expires_at,created_at,updated_at"
-  );
+  // لا نحدد أعمدة كثيرة هنا؛ لأن أي عمود غير موجود في قاعدة البيانات
+  // يجعل PostgREST يرجع خطأ 400، فتتحول كل صفحات الإعلانات إلى 404/noindex.
+  params.set("select", "*");
   params.set("id", `eq.${id}`);
   params.set("status", "eq.active");
   params.set("admin_status", "eq.approved");
@@ -111,13 +111,14 @@ async function fetchListing(id) {
 async function fetchListingImage(id) {
   try {
     const params = new URLSearchParams();
-    params.set("select", "image_url");
+    // نستخدم * لدعم المشاريع التي تسمي عمود الصورة url أو image_url.
+    params.set("select", "*");
     params.set("listing_id", `eq.${id}`);
     params.set("order", "is_main.desc");
     params.set("limit", "1");
 
     const rows = await fetchJson(`${SUPABASE_URL}/rest/v1/listing_images?${params.toString()}`);
-    return Array.isArray(rows) ? rows[0]?.image_url || "" : "";
+    return Array.isArray(rows) ? rows[0]?.url || rows[0]?.image_url || "" : "";
   } catch {
     return "";
   }
@@ -159,6 +160,7 @@ function removeOldSeo(html) {
 function getListingArea(listing) {
   const value =
     listing?.net_area ??
+    listing?.area ??
     listing?.total_area ??
     listing?.land_area ??
     listing?.build_area;
@@ -337,7 +339,7 @@ export default async function handler(req, res) {
 
       res.statusCode = 404;
       res.setHeader("Content-Type", "text/html; charset=utf-8");
-      res.setHeader("Cache-Control", "public, max-age=0, s-maxage=300, stale-while-revalidate=3600");
+      res.setHeader("Cache-Control", "no-store");
       res.end(html);
       return;
     }
@@ -362,4 +364,4 @@ export default async function handler(req, res) {
     res.setHeader("Cache-Control", "no-store");
     res.end(htmlTemplate || "");
   }
-                          }
+}
