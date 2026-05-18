@@ -327,7 +327,7 @@ export default async function handler(req, res) {
 
       res.statusCode = 404;
       res.setHeader("Content-Type", "text/html; charset=utf-8");
-      res.setHeader("Cache-Control", "no-store");
+      res.setHeader("Cache-Control", "public, max-age=60, s-maxage=300, stale-while-revalidate=600");
       res.end(html);
       return;
     }
@@ -343,16 +343,16 @@ export default async function handler(req, res) {
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader(
       "Cache-Control",
-      "public, max-age=60, s-maxage=300, stale-while-revalidate=86400"
+      "public, max-age=60, s-maxage=600, stale-while-revalidate=3600"
     );
     res.end(html);
   } catch (error) {
     console.error("listing-page SEO error:", error);
 
     const htmlTemplate = await loadIndexHtml().catch(() => "");
-    res.statusCode = 200;
+    res.statusCode = 503;
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("Cache-Control", "no-store");
-    res.end(htmlTemplate || "");
+    res.end(htmlTemplate || "Service unavailable");
   }
 }
