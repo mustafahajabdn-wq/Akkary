@@ -45,6 +45,8 @@ const routeToPage = Object.fromEntries(
 
 const dynamicRoutes = [
   { pattern: "/listing/:id", page: "detail" },
+  { pattern: "/real-estate/:city", page: "search" },
+  { pattern: "/real-estate/:city/:district", page: "search" },
   { pattern: "/seller/:id", page: "sellerProfile" },
   { pattern: "/chat/:id", page: "chat" },
   { pattern: "/ad/:id", page: "adDetail" },
