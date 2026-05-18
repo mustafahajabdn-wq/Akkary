@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import { C } from "../../shared/constants/colors.js";
 import { cities } from "../../shared/utils/geo.js";
 import { IslamicPattern, Wave } from "../../shared/components/icons.jsx";
@@ -101,6 +102,31 @@ const NEG_PREFIXES = ["بدون", "بلا", "غير", "ليس", "مافي", "م�
 
 // مؤشرات النية
 const INTENT_MARKERS = ["ابحث عن", "اريد", "أريد", "دور على", "فتش على", "بدي", "محتاج", "عندي استفسار عن"];
+
+function decodeAreaSlug(value = "") {
+  try {
+    return decodeURIComponent(String(value || ""))
+      .replace(/-/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  } catch {
+    return String(value || "")
+      .replace(/-/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+}
+
+function buildAreaQueryFromPath(pathname = "") {
+  const parts = String(pathname || "").split("/").filter(Boolean);
+  if (parts[0] !== "real-estate") return "";
+
+  const city = decodeAreaSlug(parts[1]);
+  const district = decodeAreaSlug(parts[2]);
+
+  if (!city) return "";
+  return district ? `عقارات في ${district} ${city}` : `عقارات في ${city}`;
+}
 
 // ══════════════════════════════════════════════════════════════
 //  دوال التطبيع
@@ -1028,6 +1054,8 @@ function SearchPage({
     }
   };
   if (!DC) DC = C;
+  const location = useLocation();
+  const autoSearchPathRef = React.useRef("");
   const [query, setQuery] = useState("");
   const [results, setResults] = useState(null);
   const [tags, setTags] = useState([]);
@@ -1049,6 +1077,20 @@ function SearchPage({
   useEffect(() => {
     getAllDistrictNames().then(setAllDistricts);
   }, []);
+
+  // عند فتح صفحة منطقة من روابط SEO مثل /real-estate/ريف-دمشق/يلدا
+  // نحول الرابط إلى بحث جاهز داخل نفس صفحة البحث دون إنشاء صفحات React كثيرة.
+  useEffect(() => {
+    const autoQuery = buildAreaQueryFromPath(location.pathname);
+    if (!autoQuery) return;
+    if (!allDistricts.length) return;
+    if (autoSearchPathRef.current === location.pathname) return;
+
+    autoSearchPathRef.current = location.pathname;
+    setQuery(autoQuery);
+    doSearch(autoQuery);
+  }, [location.pathname, allDistricts.length]);
+
   const suggestions = ["شقة للبيع في دمشق بلكون مصعد", "بيت عربي في حلب 3 غرف", "أرض سكنية 500 م في ريف دمشق", "شقة للإيجار في اللاذقية مفروش", "فيلا في ريف دمشق مع مسبح طابو أخضر", "شقة أو فيلا سوبر ديلوكس دمشق بين 150 و 250 متر", "شقة 3 غرف بدون مصعد للإيجار"];
   function showNotice(text, type = "ok") {
     setNotice({ text, type });
