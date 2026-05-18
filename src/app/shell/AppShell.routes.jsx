@@ -174,6 +174,34 @@ export default function AppRoutes({
         }
       />
 
+      <Route
+        path="/real-estate/:city"
+        element={
+          <SearchPage
+            {...common}
+            setDetail={setDetail}
+            setDetailPrevPage={setDetailPrevPage}
+            openDetail={openDetail}
+            favs={favs}
+            toggleFav={toggleFav}
+          />
+        }
+      />
+
+      <Route
+        path="/real-estate/:city/:district"
+        element={
+          <SearchPage
+            {...common}
+            setDetail={setDetail}
+            setDetailPrevPage={setDetailPrevPage}
+            openDetail={openDetail}
+            favs={favs}
+            toggleFav={toggleFav}
+          />
+        }
+      />
+
       <Route path="/add-choice" element={<Protected element={<AddChoicePage setPage={setPage} user={user} />} />} />
 
       <Route path="/wanted" element={<Protected element={<WantPage {...common} />} />} />
