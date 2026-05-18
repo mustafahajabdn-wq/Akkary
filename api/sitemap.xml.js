@@ -1,5 +1,4 @@
 const SITE_URL = "https://www.blabladar.com";
-const MIN_AREA_LISTINGS = 3;
 
 const SUPABASE_URL =
   process.env.SUPABASE_URL ||
@@ -19,48 +18,36 @@ function escapeXml(value) {
     .replaceAll("'", "&apos;");
 }
 
+function encodeLoc(loc) {
+  return encodeURI(loc);
+}
+
 function sitemapUrl(loc, lastmod = null, priority = "0.8") {
   return `
   <url>
-    <loc>${escapeXml(loc)}</loc>
+    <loc>${escapeXml(encodeLoc(loc))}</loc>
     ${lastmod ? `<lastmod>${escapeXml(lastmod)}</lastmod>` : ""}
     <priority>${priority}</priority>
   </url>`;
 }
 
-function cleanText(value = "") {
-  return String(value || "").replace(/\s+/g, " ").trim();
-}
-
-function nameToSlug(value = "") {
-  return encodeURIComponent(cleanText(value).replace(/\s+/g, "-"));
-}
-
-function areaUrl(city, district = "") {
-  const citySlug = nameToSlug(city);
-  const districtSlug = nameToSlug(district);
-  return districtSlug
-    ? `${SITE_URL}/real-estate/${citySlug}/${districtSlug}`
-    : `${SITE_URL}/real-estate/${citySlug}`;
-}
-
-function maxIso(a, b) {
-  const av = a ? Date.parse(a) : 0;
-  const bv = b ? Date.parse(b) : 0;
-  if (!av && !bv) return null;
-  return av >= bv ? a : b;
+function slugifyArabic(value) {
+  return String(value || "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/[\/\\?#&]+/g, "-")
+    .replace(/-+/g, "-");
 }
 
 async function fetchActiveListings() {
   if (!SUPABASE_URL || !SUPABASE_KEY) {
-    console.warn("Missing Supabase env vars for sitemap");
-    return [];
+    throw new Error("Missing Supabase env vars for sitemap");
   }
 
   const today = new Date().toISOString().slice(0, 10);
 
   const params = new URLSearchParams();
-  params.set("select", "id,city,district,created_at,updated_at");
+  params.set("select", "id,created_at,city,district");
   params.set("status", "eq.active");
   params.set("admin_status", "eq.approved");
   params.set("or", `(expires_at.is.null,expires_at.gte.${today})`);
@@ -79,48 +66,50 @@ async function fetchActiveListings() {
 
   if (!response.ok) {
     const text = await response.text().catch(() => "");
-    console.error("Sitemap listings fetch failed:", response.status, text);
-    return [];
+    throw new Error(`Sitemap listings fetch failed: ${response.status} ${text}`);
   }
 
   return await response.json();
 }
 
-function buildAreaUrls(listings = []) {
-  const cityGroups = new Map();
-  const districtGroups = new Map();
+function buildAreaUrls(listings) {
+  const areas = new Map();
 
   for (const item of listings) {
-    const city = cleanText(item?.city);
-    const district = cleanText(item?.district);
-    const lastmod = item?.updated_at || item?.created_at || null;
+    const city = String(item?.city || "").trim();
+    const district = String(item?.district || "").trim();
 
-    if (!city) continue;
+    if (!city || !district) continue;
 
-    const cityKey = city;
-    const cityRecord = cityGroups.get(cityKey) || { city, count: 0, lastmod: null };
-    cityRecord.count += 1;
-    cityRecord.lastmod = maxIso(cityRecord.lastmod, lastmod);
-    cityGroups.set(cityKey, cityRecord);
+    const key = `${city}||${district}`;
+    const current = areas.get(key) || {
+      city,
+      district,
+      count: 0,
+      lastmod: item.created_at || null,
+    };
 
-    if (district) {
-      const districtKey = `${city}|||${district}`;
-      const districtRecord = districtGroups.get(districtKey) || { city, district, count: 0, lastmod: null };
-      districtRecord.count += 1;
-      districtRecord.lastmod = maxIso(districtRecord.lastmod, lastmod);
-      districtGroups.set(districtKey, districtRecord);
+    current.count += 1;
+
+    if (item.created_at && (!current.lastmod || item.created_at > current.lastmod)) {
+      current.lastmod = item.created_at;
     }
+
+    areas.set(key, current);
   }
 
-  const cityUrls = [...cityGroups.values()]
-    .filter((item) => item.count >= MIN_AREA_LISTINGS)
-    .map((item) => sitemapUrl(areaUrl(item.city), item.lastmod, "0.85"));
+  return [...areas.values()]
+    .filter((area) => area.count >= 3)
+    .map((area) => {
+      const citySlug = slugifyArabic(area.city);
+      const districtSlug = slugifyArabic(area.district);
 
-  const districtUrls = [...districtGroups.values()]
-    .filter((item) => item.count >= MIN_AREA_LISTINGS)
-    .map((item) => sitemapUrl(areaUrl(item.city, item.district), item.lastmod, "0.85"));
-
-  return [...cityUrls, ...districtUrls];
+      return sitemapUrl(
+        `${SITE_URL}/real-estate/${citySlug}/${districtSlug}`,
+        area.lastmod || null,
+        "0.9"
+      );
+    });
 }
 
 export default async function handler(req, res) {
@@ -138,7 +127,7 @@ export default async function handler(req, res) {
       .map((item) => {
         return sitemapUrl(
           `${SITE_URL}/listing/${item.id}`,
-          item.updated_at || item.created_at || null,
+          item.created_at || null,
           "0.8"
         );
       });
@@ -161,15 +150,8 @@ ${listingUrls.join("\n")}
   } catch (error) {
     console.error("sitemap error:", error);
 
-    const fallbackXml = `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${sitemapUrl(`${SITE_URL}/`, null, "1.0")}
-${sitemapUrl(`${SITE_URL}/search`, null, "0.9")}
-${sitemapUrl(`${SITE_URL}/about`, null, "0.8")}
-</urlset>`;
-
-    res.setHeader("Content-Type", "application/xml; charset=utf-8");
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
     res.setHeader("Cache-Control", "no-store");
-    res.status(200).send(fallbackXml);
+    res.status(503).send("Sitemap temporarily unavailable");
   }
 }
