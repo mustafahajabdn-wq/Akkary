@@ -23,6 +23,10 @@
     "api/listing-page.js": {
       "memory": 512,
       "maxDuration": 10
+    },
+    "api/area-page.js": {
+      "memory": 512,
+      "maxDuration": 10
     }
   },
   "redirects": [
@@ -36,6 +40,14 @@
     {
       "source": "/sitemap.xml",
       "destination": "/api/sitemap.xml"
+    },
+    {
+      "source": "/real-estate/:city/:district",
+      "destination": "/api/area-page?city=:city&district=:district"
+    },
+    {
+      "source": "/real-estate/:city",
+      "destination": "/api/area-page?city=:city"
     },
     {
       "source": "/listing/:id",
