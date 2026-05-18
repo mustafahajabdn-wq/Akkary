@@ -1,4 +1,5 @@
 const SITE_URL = "https://www.blabladar.com";
+const MIN_AREA_LISTINGS = 3;
 
 const SUPABASE_URL =
   process.env.SUPABASE_URL ||
@@ -27,6 +28,29 @@ function sitemapUrl(loc, lastmod = null, priority = "0.8") {
   </url>`;
 }
 
+function cleanText(value = "") {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function nameToSlug(value = "") {
+  return encodeURIComponent(cleanText(value).replace(/\s+/g, "-"));
+}
+
+function areaUrl(city, district = "") {
+  const citySlug = nameToSlug(city);
+  const districtSlug = nameToSlug(district);
+  return districtSlug
+    ? `${SITE_URL}/real-estate/${citySlug}/${districtSlug}`
+    : `${SITE_URL}/real-estate/${citySlug}`;
+}
+
+function maxIso(a, b) {
+  const av = a ? Date.parse(a) : 0;
+  const bv = b ? Date.parse(b) : 0;
+  if (!av && !bv) return null;
+  return av >= bv ? a : b;
+}
+
 async function fetchActiveListings() {
   if (!SUPABASE_URL || !SUPABASE_KEY) {
     console.warn("Missing Supabase env vars for sitemap");
@@ -36,7 +60,7 @@ async function fetchActiveListings() {
   const today = new Date().toISOString().slice(0, 10);
 
   const params = new URLSearchParams();
-  params.set("select", "id,created_at");
+  params.set("select", "id,city,district,created_at,updated_at");
   params.set("status", "eq.active");
   params.set("admin_status", "eq.approved");
   params.set("or", `(expires_at.is.null,expires_at.gte.${today})`);
@@ -62,6 +86,43 @@ async function fetchActiveListings() {
   return await response.json();
 }
 
+function buildAreaUrls(listings = []) {
+  const cityGroups = new Map();
+  const districtGroups = new Map();
+
+  for (const item of listings) {
+    const city = cleanText(item?.city);
+    const district = cleanText(item?.district);
+    const lastmod = item?.updated_at || item?.created_at || null;
+
+    if (!city) continue;
+
+    const cityKey = city;
+    const cityRecord = cityGroups.get(cityKey) || { city, count: 0, lastmod: null };
+    cityRecord.count += 1;
+    cityRecord.lastmod = maxIso(cityRecord.lastmod, lastmod);
+    cityGroups.set(cityKey, cityRecord);
+
+    if (district) {
+      const districtKey = `${city}|||${district}`;
+      const districtRecord = districtGroups.get(districtKey) || { city, district, count: 0, lastmod: null };
+      districtRecord.count += 1;
+      districtRecord.lastmod = maxIso(districtRecord.lastmod, lastmod);
+      districtGroups.set(districtKey, districtRecord);
+    }
+  }
+
+  const cityUrls = [...cityGroups.values()]
+    .filter((item) => item.count >= MIN_AREA_LISTINGS)
+    .map((item) => sitemapUrl(areaUrl(item.city), item.lastmod, "0.85"));
+
+  const districtUrls = [...districtGroups.values()]
+    .filter((item) => item.count >= MIN_AREA_LISTINGS)
+    .map((item) => sitemapUrl(areaUrl(item.city, item.district), item.lastmod, "0.85"));
+
+  return [...cityUrls, ...districtUrls];
+}
+
 export default async function handler(req, res) {
   try {
     const listings = await fetchActiveListings();
@@ -77,21 +138,24 @@ export default async function handler(req, res) {
       .map((item) => {
         return sitemapUrl(
           `${SITE_URL}/listing/${item.id}`,
-          item.created_at || null,
+          item.updated_at || item.created_at || null,
           "0.8"
         );
       });
 
+    const areaUrls = buildAreaUrls(listings);
+
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${staticUrls.join("\n")}
+${areaUrls.join("\n")}
 ${listingUrls.join("\n")}
 </urlset>`;
 
     res.setHeader("Content-Type", "application/xml; charset=utf-8");
     res.setHeader(
       "Cache-Control",
-      "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400"
+      "public, max-age=300, s-maxage=1800, stale-while-revalidate=3600"
     );
     res.status(200).send(xml);
   } catch (error) {
@@ -105,10 +169,7 @@ ${sitemapUrl(`${SITE_URL}/about`, null, "0.8")}
 </urlset>`;
 
     res.setHeader("Content-Type", "application/xml; charset=utf-8");
-    res.setHeader(
-      "Cache-Control",
-      "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400"
-    );
+    res.setHeader("Cache-Control", "no-store");
     res.status(200).send(fallbackXml);
   }
 }
