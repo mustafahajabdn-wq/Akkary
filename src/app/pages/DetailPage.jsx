@@ -291,22 +291,18 @@ function DetailPage({
     if (!item?.id) return;
 
     const viewKey = "viewed_" + item.id;
-    const lastView = Number(localStorage.getItem(viewKey) || 0);
-    const now = Date.now();
-
-    if (lastView && now - lastView < 24 * 60 * 60 * 1000) return;
+    if (sessionStorage.getItem(viewKey)) return;
 
     const baseViews = Number(item?.views || 0);
 
     incrementListingViews(item.id, baseViews)
       .then((nextViews) => {
         if (nextViews === null) return;
-
         setViewCount(nextViews);
-        localStorage.setItem(viewKey, String(now));
+        sessionStorage.setItem(viewKey, "1");
       })
       .catch(() => {});
-  }, [item?.id, item?.views]);
+  }, [item?.id]);
 
   const [poiLayers, setPoiLayers] = useState({});
   const [poiOpen, setPoiOpen] = useState(false);
