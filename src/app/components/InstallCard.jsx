@@ -6,7 +6,6 @@ export default function InstallCard({
   DC,
   show = false,
   onInstall = () => {},
-  onDismiss = () => {},
 }) {
   const [showInstructions, setShowInstructions] = useState(false);
 
@@ -154,18 +153,6 @@ export default function InstallCard({
       cursor: "pointer",
       fontFamily: "inherit",
     },
-    s19: {
-      padding: "8px 10px",
-      borderRadius: 20,
-      border: "1px solid rgba(255,255,255,0.35)",
-      background: "transparent",
-      color: "white",
-      fontSize: 12,
-      fontWeight: 700,
-      cursor: "pointer",
-      fontFamily: "inherit",
-      whiteSpace: "nowrap",
-    },
   };
 
   if (!show) return null;
@@ -192,9 +179,7 @@ export default function InstallCard({
           <button onClick={onInstall} style={sx.s9(palette)}>
             تثبيت
           </button>
-          <button onClick={onDismiss} style={sx.s19}>
-            لاحقًا
-          </button>
+
         </div>
       </div>
 
