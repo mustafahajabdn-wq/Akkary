@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 const DISMISS_KEY = "pwa_install_dismissed";
-const SHOW_DELAY_MS = 30000;
+const SHOW_DELAY_MS = 3000;
 
 export function useInstallPrompt() {
   const [promptEvent, setPromptEvent] = useState(null);
