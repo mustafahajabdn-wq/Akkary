@@ -553,6 +553,7 @@ function AddPage({ user, onPublished }) {
   const navigate = useNavigate();
   const [dynValues, setDynValues] = useState({});
   const [currentUserId, setCurrentUserId] = useState(null);
+  const [hasDraft, setHasDraft] = useState(false);
   const [propTypes, setPropTypes] = useState([]);
   const [propFields, setPropFields] = useState([]);
   const [images, setImages] = useState([]);
@@ -585,16 +586,21 @@ function AddPage({ user, onPublished }) {
     let alive = true;
     const hydrate = async uid => {
       if (!uid || !alive) return;
-      setCurrentUserId(uid);
       let draft = {};
       try { const saved = localStorage.getItem(`addpage_draft:${uid}`); if (saved) draft = JSON.parse(saved) || {}; } catch { draft = {}; }
+      const hasSavedDraft = Object.keys(draft || {}).length > 0;
       let profile = null;
       try { profile = await fetchProfile(uid); } catch { profile = null; }
       if (!alive) return;
+      // setCurrentUserId AFTER setDynValues so the save-effect doesn't fire
+      // with an empty/partial state before the draft is merged, which would
+      // overwrite the stored draft in localStorage.
       setDynValues(prev => {
-        const base = Object.keys(draft || {}).length ? { ...prev, ...draft } : prev;
+        const base = hasSavedDraft ? { ...prev, ...draft } : prev;
         return mergeProfileContactDefaults(base, profile);
       });
+      setCurrentUserId(uid);
+      setHasDraft(hasSavedDraft);
     };
     const uid = user?.id || null;
     if (uid) hydrate(uid);
@@ -850,11 +856,16 @@ function AddPage({ user, onPublished }) {
           </div>
           <div style={AP.heroMetaRow}>
             <div style={AP.heroMetaText}>أضف تفاصيل عقارك</div>
-            {Object.keys(dynValues).length > 0 && (
+            {hasDraft && (
               <button type="button" onClick={() => {
-                setDynValues({});
+                // Re-apply propFields defaults and propTypes defaults instead of wiping to {}
+                const fieldDefaults = {};
+                propFields.forEach(f => { if (f.ui?.default !== undefined) fieldDefaults[f.field_key] = f.ui.default; });
+                const firstCategory = propTypes[0]?.name || "";
+                setDynValues({ ...fieldDefaults, type: "sell", category: firstCategory });
                 setSuccessMessage("");
                 setError("");
+                setHasDraft(false);
                 try { const uid = currentUserId || user?.id; if (uid) localStorage.removeItem(`addpage_draft:${uid}`); } catch {}
               }} style={AP.clearDraftButton}>🗑 مسح المسودة</button>
             )}
