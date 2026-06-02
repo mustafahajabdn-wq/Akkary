@@ -67,5 +67,5 @@ export function shouldStartUserBadgeRealtime() {
 export function shouldStartVisitorPresence() {
   if (typeof window === "undefined") return false;
   if (isAuditOrBotUserAgent()) return false;
-  return !isPublicLandingPath();
+  return true; // يعمل على كل الصفحات بما فيها العامة
 }
