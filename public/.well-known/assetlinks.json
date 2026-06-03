@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.blabladar.www.twa",
+      "sha256_cert_fingerprints": [
+        "21:1D:86:B9:24:D4:6D:CD:F3:E5:4D:4C:04:B9:D3:37:89:98:AB:00:43:E2:9A:FB:59:91:0C:51:30:38:24:C2"
+      ]
+    }
+  }
+]
