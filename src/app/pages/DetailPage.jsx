@@ -291,7 +291,10 @@ function DetailPage({
     if (!item?.id) return;
 
     const viewKey = "viewed_" + item.id;
-    if (sessionStorage.getItem(viewKey)) return;
+    const lastView = Number(sessionStorage.getItem(viewKey) || 0);
+    const now = Date.now();
+
+    if (lastView && now - lastView < 5 * 60 * 1000) return;
 
     const baseViews = Number(item?.views || 0);
 
@@ -299,7 +302,7 @@ function DetailPage({
       .then((nextViews) => {
         if (nextViews === null) return;
         setViewCount(nextViews);
-        sessionStorage.setItem(viewKey, "1");
+        sessionStorage.setItem(viewKey, String(now));
       })
       .catch(() => {});
   }, [item?.id]);
