@@ -131,14 +131,27 @@ function TermsPage() {
           </p>
 
           <section style={styles.section}>
-            <div style={styles.sectionTitle}>1. طبيعة الخدمة</div>
+            <div style={styles.sectionTitle}>1. ضوابط مشروعية العقارات المعروضة</div>
+            <p style={styles.paragraph}>
+              تحرص المنصة على ألا يُنشر فيها إلا ما غلب على الظن سلامةُ حقِّ التصرف فيه. وعليه يُمنع منعًا باتًّا عرضُ أو طلبُ الرهن الربوي، أو الترويج له، أو التوسط فيه بأي صورة كانت.
+            </p>
+            <p style={{...styles.paragraph, marginTop: 10}}>
+              كما يُمنع نشرُ أي إعلان يتعلق بعقارٍ أُقيم على أرضٍ استُلبت من أصحابها بغير حق، أو انتُزعت حقوقُهم فيها ظلمًا أو عدوانًا، أو بعقارٍ ترتب على إرثٍ شابه التواطؤ على أكل الحقوق أو حرمانُ مستحقيها منها، أو بعقارٍ أُنشئ أو شُيِّد أو استُعمل على وجهٍ يخالف الحق أو يعتدي على ملك الغير.
+            </p>
+            <p style={{...styles.paragraph, marginTop: 10}}>
+              ويُقِرُّ المعلن بأن العقار المعروض لا يعلم فيه تعديًا على حقٍّ ثابتٍ للغير، ويتحمّل وحده كامل المسؤولية القانونية والشرعية عن صحة ذلك، وللمنصة حقُّ رفض الإعلان أو حذفه متى ظهر ما يثير الشبهة في مشروعيته أو سلامة الحقوق المتعلقة به.
+            </p>
+          </section>
+
+          <section style={styles.section}>
+            <div style={styles.sectionTitle}>2. طبيعة الخدمة</div>
             <p style={styles.paragraph}>
               طابو أخضر منصة تقنية لعرض الإعلانات العقارية وربط المعلنين بالمهتمين. المنصة ليست طرفًا في أي بيع أو شراء أو إيجار أو اتفاق يتم بين المستخدمين.
             </p>
           </section>
 
           <section style={styles.section}>
-            <div style={styles.sectionTitle}>2. مسؤولية المستخدم</div>
+            <div style={styles.sectionTitle}>3. مسؤولية المستخدم</div>
             <ul style={styles.list}>
               <li>يتحمل المستخدم المسؤولية الكاملة عن صحة البيانات التي يضيفها.</li>
               <li>يجب أن يكون للمستخدم الحق في نشر الإعلان، سواء كان مالكًا أو مفوضًا أو وسيطًا مخولًا.</li>
@@ -148,7 +161,7 @@ function TermsPage() {
           </section>
 
           <section style={styles.section}>
-            <div style={styles.sectionTitle}>3. بيانات الإعلان</div>
+            <div style={styles.sectionTitle}>4. بيانات الإعلان</div>
             <ul style={styles.list}>
               <li>يجب أن تكون معلومات العقار والسعر والموقع ووسائل التواصل صحيحة قدر الإمكان.</li>
               <li>يحق لإدارة المنصة مراجعة الإعلان قبل نشره للعامة.</li>
@@ -157,7 +170,7 @@ function TermsPage() {
           </section>
 
           <section style={styles.section}>
-            <div style={styles.sectionTitle}>4. المحتوى المحظور</div>
+            <div style={styles.sectionTitle}>5. المحتوى المحظور</div>
             <ul style={styles.list}>
               <li>يمنع نشر أي محتوى مخالف للقانون أو العرف العام.</li>
               <li>يمنع نشر محتوى مسيء أو احتيالي أو ينتهك حقوق الآخرين.</li>
@@ -166,32 +179,32 @@ function TermsPage() {
           </section>
 
           <section style={styles.section}>
-            <div style={styles.sectionTitle}>5. حقوق المنصة</div>
+            <div style={styles.sectionTitle}>6. حقوق المنصة</div>
             <ul style={styles.list}>
               <li>تحتفظ المنصة بحق مراجعة الإعلانات والحسابات عند الحاجة.</li>
-              <li>تحتفظ المنصة بحق حذف أي إعلان مخالف أو تعليق أي حساب يستخدم المنصة بشكل غير مناسب.</li>
+              <li>يحق للمنصة تعليق أو إيقاف أو حذف أي حساب أو إعلان في حال مخالفة هذه الشروط أو عند وجود أسباب أمنية أو تقنية أو قانونية تقتضي ذلك.</li>
               <li>يجوز للمنصة تطوير أو تعديل بعض الميزات أو السياسات لتحسين الخدمة.</li>
             </ul>
           </section>
 
           <section style={styles.section}>
-            <div style={styles.sectionTitle}>6. التواصل والخصوصية</div>
+            <div style={styles.sectionTitle}>7. التواصل والخصوصية</div>
             <p style={styles.paragraph}>
               قد تُستخدم بيانات التواصل التي يضيفها المستخدم داخل الإعلان لتسهيل التواصل بين الأطراف، وقد تُحفظ بعض البيانات التشغيلية مثل عدد النقرات وتاريخ النشر والمراجعة لأغراض تحسين الخدمة والحماية.
             </p>
           </section>
 
           <section style={styles.section}>
-            <div style={styles.sectionTitle}>7. الرسوم</div>
+            <div style={styles.sectionTitle}>8. الرسوم</div>
             <p style={styles.paragraph}>
               قد تفرض المنصة رسومًا رمزية أو اختيارية على بعض الخدمات أو العمليات وفق السياسة المعتمدة داخل التطبيق، ويتم توضيح ذلك عند الحاجة.
             </p>
           </section>
 
           <section style={styles.section}>
-            <div style={styles.sectionTitle}>8. إخلاء المسؤولية</div>
+            <div style={styles.sectionTitle}>9. إخلاء المسؤولية</div>
             <p style={styles.paragraph}>
-              لا تضمن المنصة صحة جميع الإعلانات المنشورة، ولا تتحمل مسؤولية الاتفاقات أو الصفقات التي تتم بين المستخدمين خارج نطاق إدارتها المباشرة.
+              لا تتحمل المنصة أي مسؤولية عن دقة أو اكتمال أو موثوقية المعلومات التي يقدمها المستخدمون، كما لا تتحمل أي مسؤولية عن الأضرار أو الخسائر الناتجة عن الاعتماد على الإعلانات المنشورة أو عن أي تعامل يتم بين الأطراف.
             </p>
           </section>
 
