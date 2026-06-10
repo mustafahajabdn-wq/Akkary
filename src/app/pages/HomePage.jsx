@@ -263,6 +263,12 @@ function HomePage({
   const [cityOptions, setCityOptions] = useState(() => ["الكل", ...cities]);
   const [visibleCount, setVisibleCount] = useState(20);
   const [internalLoadingMore, setInternalLoadingMore] = useState(false);
+
+  // Pull to Refresh
+  const [ptrActive, setPtrActive] = useState(false);
+  const [ptrY, setPtrY] = useState(0);
+  const ptrRef = useRef({ startY: 0, pulling: false });
+  const PTR_THRESHOLD = 70;
   const [cardSettings, setCardSettings] = useState(() => {
     try {
       const savedShowTimeAgo = localStorage.getItem("card_show_time_ago");
@@ -696,6 +702,49 @@ function HomePage({
     loadListingsRef.current = loadListings;
   }, [loadListings]);
 
+  // Pull to Refresh logic
+  useEffect(() => {
+    const el = document.documentElement;
+
+    const onTouchStart = (e) => {
+      if (window.scrollY === 0) {
+        ptrRef.current.startY = e.touches[0].clientY;
+        ptrRef.current.pulling = true;
+      }
+    };
+
+    const onTouchMove = (e) => {
+      if (!ptrRef.current.pulling) return;
+      const delta = e.touches[0].clientY - ptrRef.current.startY;
+      if (delta > 0 && window.scrollY === 0) {
+        setPtrY(Math.min(delta * 0.4, PTR_THRESHOLD));
+      }
+    };
+
+    const onTouchEnd = () => {
+      if (!ptrRef.current.pulling) return;
+      ptrRef.current.pulling = false;
+      if (ptrY >= PTR_THRESHOLD) {
+        setPtrActive(true);
+        setPtrY(0);
+        Promise.resolve(loadListingsRef.current()).finally(() => {
+          setPtrActive(false);
+        });
+      } else {
+        setPtrY(0);
+      }
+    };
+
+    document.addEventListener("touchstart", onTouchStart, { passive: true });
+    document.addEventListener("touchmove", onTouchMove, { passive: true });
+    document.addEventListener("touchend", onTouchEnd);
+    return () => {
+      document.removeEventListener("touchstart", onTouchStart);
+      document.removeEventListener("touchmove", onTouchMove);
+      document.removeEventListener("touchend", onTouchEnd);
+    };
+  }, [ptrY]);
+
   useEffect(() => {
     loadMoreListingsRef.current = loadMoreListings;
   }, [loadMoreListings]);
@@ -947,6 +996,27 @@ function HomePage({
 
   return (
     <div style={sx.s1(DC)}>
+      {/* Pull to Refresh indicator */}
+      {(ptrY > 0 || ptrActive) && (
+        <div style={{
+          position: "fixed", top: 0, left: 0, right: 0, zIndex: 9999,
+          display: "flex", justifyContent: "center", alignItems: "center",
+          height: ptrActive ? 48 : Math.max(ptrY * 0.7, 0),
+          background: "transparent",
+          transition: ptrActive ? "none" : "height 0.15s ease",
+          pointerEvents: "none",
+        }}>
+          <div style={{
+            width: 36, height: 36, borderRadius: "50%",
+            background: "#1A4A2E", color: "#fff",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 18, opacity: ptrActive ? 1 : Math.min(ptrY / PTR_THRESHOLD, 1),
+            animation: ptrActive ? "ptr-spin 0.7s linear infinite" : "none",
+          }}>
+            {ptrActive ? "⟳" : "↓"}
+          </div>
+        </div>
+      )}
       <div style={sx.s2(C)}>
         <IslamicPattern opacity={0.1} color="#FFFFFF" />
         <div style={sx.s3}>
@@ -1222,6 +1292,17 @@ function HomePage({
       </div>
     </div>
   );
+}
+
+// PTR spinner animation
+if (typeof document !== "undefined") {
+  const styleId = "ptr-spin-style";
+  if (!document.getElementById(styleId)) {
+    const s = document.createElement("style");
+    s.id = styleId;
+    s.textContent = "@keyframes ptr-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }";
+    document.head.appendChild(s);
+  }
 }
 
 export default HomePage;
