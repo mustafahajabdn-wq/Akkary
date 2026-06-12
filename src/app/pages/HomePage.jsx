@@ -269,6 +269,9 @@ function HomePage({
   const [ptrY, setPtrY] = useState(0);
   const ptrRef = useRef({ startY: 0, pulling: false });
   const PTR_THRESHOLD = 70;
+
+  // كشف متصفح فيسبوك
+  const isFBBrowser = /FBAN|FBAV|FB_IAB/i.test(navigator.userAgent);
   const [cardSettings, setCardSettings] = useState(() => {
     try {
       const savedShowTimeAgo = localStorage.getItem("card_show_time_ago");
@@ -996,6 +999,41 @@ function HomePage({
 
   return (
     <div style={sx.s1(DC)}>
+      {/* بانر متصفح فيسبوك */}
+      {isFBBrowser && (
+        <div style={{
+          position: "fixed", top: 0, left: 0, right: 0, zIndex: 99999,
+          background: "#1877F2", color: "#fff",
+          padding: "10px 14px", display: "flex", alignItems: "center",
+          justifyContent: "space-between", gap: 10, direction: "rtl",
+          boxShadow: "0 2px 10px rgba(0,0,0,0.2)", fontSize: 13,
+        }}>
+          <span style={{ flex: 1, lineHeight: 1.5 }}>
+            🌐 لتسجيل الدخول افتح الموقع في متصفح Chrome أو Safari
+          </span>
+          <button
+            onClick={() => {
+              const url = "https://www.blabladar.com" + window.location.pathname;
+              // Android intent fallback
+              const isAndroid = /android/i.test(navigator.userAgent);
+              if (isAndroid) {
+                window.location.href = `intent://${url.replace("https://", "")}#Intent;scheme=https;package=com.android.chrome;end`;
+              } else {
+                window.open(url, "_blank");
+              }
+            }}
+            style={{
+              background: "#fff", color: "#1877F2", border: "none",
+              borderRadius: 20, padding: "5px 12px", fontWeight: 800,
+              fontSize: 12, cursor: "pointer", whiteSpace: "nowrap",
+              fontFamily: "inherit",
+            }}
+          >
+            افتح ↗
+          </button>
+        </div>
+      )}
+
       {/* Pull to Refresh indicator */}
       {(ptrY > 0 || ptrActive) && (
         <div style={{
