@@ -802,7 +802,11 @@ function SellerProfilePage({
       <div style={S.pad14}>
         {(() => {
           const phones = [sellerProfile?.phone, sellerProfile?.phone2].filter(Boolean);
-          const was = [sellerProfile?.whatsapp, sellerProfile?.whatsapp2].filter(Boolean);
+          // استخدم phone كرقم واتساب إذا كان whatsapp فارغاً (نفس منطق DetailPage)
+          const was = [
+            sellerProfile?.whatsapp || sellerProfile?.phone,
+            sellerProfile?.whatsapp2 || sellerProfile?.phone2
+          ].filter(Boolean);
           const curPhone = phones[activePhone] || "";
           const curWa = was[activeWa] || "";
 
