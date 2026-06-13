@@ -3,6 +3,7 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import ErrorBoundary from "./shell/ErrorBoundary.jsx";
 import AppShell from "./shell/AppShell.jsx";
 import AuthCallbackPage from "./pages/AuthCallbackPage.jsx";
+import AddViaWhatsAppPage from "./pages/AddViaWhatsAppPage.jsx";
 import "../shared/styles/global.css";
 
 export default function App() {
@@ -14,5 +15,5 @@ export default function App() {
       document.head.appendChild(s);
     }
   }, []);
-  return <ErrorBoundary><BrowserRouter><Routes><Route path="/auth/callback" element={<AuthCallbackPage />} /><Route path="*" element={<AppShell />} /></Routes></BrowserRouter></ErrorBoundary>;
+  return <ErrorBoundary><BrowserRouter><Routes><Route path="/auth/callback" element={<AuthCallbackPage />} /><Route path="/add-whatsapp" element={<AddViaWhatsAppPage />} /><Route path="*" element={<AppShell />} /></Routes></BrowserRouter></ErrorBoundary>;
 }
