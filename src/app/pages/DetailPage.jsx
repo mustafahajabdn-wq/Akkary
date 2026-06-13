@@ -209,7 +209,8 @@ function DetailPage({
   const isFaved = favs?.includes(item?.id);
 
   useEffect(() => {
-    if (item?.views != null) setViewCount(item.views);
+    if (item?.views != null)
+      setViewCount(prev => Math.max(prev, item.views));
   }, [item?.views]);
 
   useEffect(() => {
