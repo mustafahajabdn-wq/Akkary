@@ -14,6 +14,18 @@ import { findOrCreateConversation } from "../services/messaging.js";
 import { blockUserAndCleanFollows } from "../services/blockService.js";
 import { S } from "../../shared/styles/primitives.js";
 
+function toWhatsAppNumber(value) {
+  let n = String(value || "").trim().replace(/[^\d+]/g, "");
+  if (n.startsWith("+")) n = n.slice(1);
+  n = n.replace(/\D/g, "");
+  if (n.startsWith("00")) n = n.slice(2);
+  if (n.startsWith("963")) return n;
+  if (n.startsWith("09")) return "963" + n.slice(1);
+  if (n.startsWith("9") && n.length === 9) return "963" + n;
+  return n;
+}
+
+
 const reportStorageKey = (userId, itemType, itemId) =>
   userId && itemId ? `report_sent:${userId}:${itemType}:${itemId}` : "";
 
@@ -892,7 +904,7 @@ function SellerProfilePage({
 
               {curWa && (
                 <a
-                  href={"https://wa.me/" + curWa.replace(/[^0-9]/g, "")}
+                  href={"https://wa.me/" + toWhatsAppNumber(curWa)}
                   target="_blank"
                   rel="noreferrer"
                   style={rowSx.wa}
