@@ -304,6 +304,8 @@ function DetailPage({
         if (nextViews === null) return;
         setViewCount(nextViews);
         localStorage.setItem(viewKey, String(now));
+        // حدّث الكاش بالقيمة الجديدة حتى لا يُعرض العداد القديم
+        if (item) setDetailCache({ ...item, views: nextViews });
       })
       .catch(() => {});
   }, [item?.id]);
