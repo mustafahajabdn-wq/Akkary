@@ -294,17 +294,27 @@ function DetailPage({
     const lastView = Number(sessionStorage.getItem(viewKey) || 0);
     const now = Date.now();
 
-    if (lastView && now - lastView < 5 * 60 * 1000) return;
+    // DEBUG: أزل هذا بعد التشخيص
+    console.log("[views] key:", viewKey, "lastView:", lastView, "diff:", lastView ? Math.round((now - lastView) / 1000) + "s" : "none");
+
+    if (lastView && now - lastView < 5 * 60 * 1000) {
+      console.log("[views] skipped - too soon");
+      return;
+    }
 
     const baseViews = Number(item?.views || 0);
+    console.log("[views] calling increment, base:", baseViews);
 
     incrementListingViews(item.id, baseViews)
       .then((nextViews) => {
+        console.log("[views] result:", nextViews);
         if (nextViews === null) return;
         setViewCount(nextViews);
         sessionStorage.setItem(viewKey, String(now));
       })
-      .catch(() => {});
+      .catch((err) => {
+        console.error("[views] error:", err);
+      });
   }, [item?.id]);
 
   const [poiLayers, setPoiLayers] = useState({});
