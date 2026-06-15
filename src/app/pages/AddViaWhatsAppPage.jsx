@@ -81,33 +81,50 @@ function AddViaWhatsAppPage({ setPage, DC }) {
 
   useEffect(() => {
     fetchAppSettings(["whatsapp_offer"]).then(map => {
-      if (map?.whatsapp_offer) setWaNumber(map.whatsapp_offer.replace(/[^0-9]/g, ""));
+      if (map?.whatsapp_offer) {
+        const clean = map.whatsapp_offer.replace(/[^0-9]/g, "");
+        if (clean) setWaNumber(clean);
+      }
     }).catch(() => {});
   }, []);
 
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
-  const isValid = form.city && form.desc.trim().length > 5;
+  const isValid = true; // الزر مفعّل دائماً
 
   const buildMessage = () => {
+    const cityLine = form.city
+      ? `${form.city}${form.district ? " — " + form.district : ""}`
+      : "(لم يُحدَّد)";
+    const descLine = form.desc.trim() || "(لم يُكتب وصف)";
+
     const lines = [
       `🏠 إعلان عقاري — ${form.offer}`,
       `📌 النوع: ${form.type}`,
-      `📍 الموقع: ${form.city}${form.district ? " — " + form.district : ""}`,
+      `📍 الموقع: ${cityLine}`,
       form.area  ? `📐 المساحة: ${form.area} م²` : null,
       form.price ? `💰 السعر: ${form.price}` : null,
-      `📝 التفاصيل: ${form.desc.trim()}`,
+      `📝 التفاصيل: ${descLine}`,
       ``,
       `— أُرسل عبر طابو أخضر`,
     ].filter(l => l !== null).join("\n");
     return lines;
   };
 
+  const openWhatsApp = (url) => {
+    // أفضل توافق مع iOS / Facebook In-App Browser من window.open
+    const a = document.createElement("a");
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    a.click();
+  };
+
   const handleSend = () => {
     if (!isValid) return;
     const msg = buildMessage();
     const url = `https://wa.me/${waNumber}?text=${encodeURIComponent(msg)}`;
-    window.open(url, "_blank", "noopener,noreferrer");
+    openWhatsApp(url);
     setSent(true);
   };
 
@@ -285,11 +302,7 @@ function AddViaWhatsAppPage({ setPage, DC }) {
               إرسال عبر واتساب
             </button>
 
-            {!isValid && (
-              <div style={{ textAlign: "center", fontSize: 12, color: C.text3, marginTop: 8 }}>
-                يرجى اختيار المدينة وكتابة وصف الإعلان
-              </div>
-            )}
+
           </>
         )}
       </div>
