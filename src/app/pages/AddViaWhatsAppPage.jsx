@@ -99,12 +99,12 @@ function AddViaWhatsAppPage({ setPage, DC }) {
     const descLine = form.desc.trim() || "(لم يُكتب وصف)";
 
     const lines = [
-      `🏠 إعلان عقاري — ${form.offer}`,
-      `📌 النوع: ${form.type}`,
-      `📍 الموقع: ${cityLine}`,
-      form.area  ? `📐 المساحة: ${form.area} م²` : null,
-      form.price ? `💰 السعر: ${form.price}` : null,
-      `📝 التفاصيل: ${descLine}`,
+      `إعلان عقاري — ${form.offer}`,
+      `النوع: ${form.type}`,
+      `الموقع: ${cityLine}`,
+      form.area  ? `المساحة: ${form.area} م²` : null,
+      form.price ? `السعر: ${form.price}` : null,
+      `التفاصيل: ${descLine}`,
       ``,
       `— أُرسل عبر طابو أخضر`,
     ].filter(l => l !== null).join("\n");
@@ -123,7 +123,7 @@ function AddViaWhatsAppPage({ setPage, DC }) {
   const handleSend = () => {
     if (!isValid) return;
     const msg = buildMessage();
-    const url = `https://wa.me/${waNumber}?text=${encodeURIComponent(msg)}`;
+    const url = `https://api.whatsapp.com/send?phone=${waNumber}&text=${encodeURIComponent(msg)}`;
     openWhatsApp(url);
     setSent(true);
   };
