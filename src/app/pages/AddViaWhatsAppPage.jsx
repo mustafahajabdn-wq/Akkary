@@ -112,7 +112,15 @@ function AddViaWhatsAppPage({ setPage, DC }) {
   };
 
   const openWhatsApp = (url) => {
-    // أفضل توافق مع iOS / Facebook In-App Browser من window.open
+    const isFB = /FBAN|FBAV|FB_IAB/i.test(navigator.userAgent);
+
+    // داخل متصفح فيسبوك المدمج: التحويل المباشر أكثر موثوقية
+    if (isFB) {
+      window.location.href = url;
+      return;
+    }
+
+    // المتصفحات العادية: فتح في تبويب جديد
     const a = document.createElement("a");
     a.href = url;
     a.target = "_blank";
