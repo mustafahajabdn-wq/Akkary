@@ -291,6 +291,10 @@ function DetailPage({
   useEffect(() => {
     if (!item?.id) return;
 
+    // الكاش مخصص للعرض السريع فقط.
+    // لا نزيد المشاهدات اعتمادًا على نسخة الكاش حتى لا يُرسل رقم views قديم.
+    if (fromCache) return;
+
     const viewKey = "viewed_" + item.id;
     const lastView = Number(localStorage.getItem(viewKey) || 0);
     const now = Date.now();
@@ -304,11 +308,11 @@ function DetailPage({
         if (nextViews === null) return;
         setViewCount(nextViews);
         localStorage.setItem(viewKey, String(now));
-        // حدّث الكاش بالقيمة الجديدة حتى لا يُعرض العداد القديم
+        // حدّث الكاش بالقيمة الجديدة بعد الاعتماد على نسخة حديثة لا على الكاش القديم.
         if (item) setDetailCache({ ...item, views: nextViews });
       })
       .catch(() => {});
-  }, [item?.id]);
+  }, [item?.id, fromCache]);
 
   const [poiLayers, setPoiLayers] = useState({});
   const [poiOpen, setPoiOpen] = useState(false);
