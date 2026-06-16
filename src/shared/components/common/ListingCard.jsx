@@ -396,6 +396,15 @@ function ListingCard({
       })}>
               🗑️ حذف
             </button>}
+          {onEdit && <button onClick={e => {
+        e.stopPropagation();
+        onEdit(item);
+      }} style={CC.adminActionButton(DC, {
+        background: "#EFF6FF",
+        color: "#2563EB"
+      })}>
+              ✏️ تعديل كامل
+            </button>}
         </div>}
 
       {mode === "pending" && <div style={CC.actionRow(DC)}>
