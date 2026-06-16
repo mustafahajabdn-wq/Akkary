@@ -8,6 +8,7 @@ import { getSupabase } from "../../shared/services/supabaseClient.js";
 import { fetchListingRow } from "../services/listingService.js";
 import { getCurrentAuthUser } from "../services/authService.js";
 import { fetchProfile } from "../services/profileService.js";
+import { uploadToListingImages } from "../services/mediaService.js";
 
 // ── تعريف كل أعمدة جدول listings مع نوع كل عمود ──
 // type: text | number | integer | boolean | jsonb | date | datetime
@@ -239,6 +240,173 @@ function FieldInput({ col, value, onChange, DC }) {
   );
 }
 
+
+// ── إدارة صور وفيديو الإعلان (لصق، رفع، حذف) ──
+function MediaManager({ listingId, images, setImages, videoUrl, setVideoUrl, DC }) {
+  const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const [videoUploading, setVideoUploading] = useState(false);
+
+  const sx = {
+    wrap: { marginBottom: 4 },
+    dropZone: (active) => ({
+      border: `2px dashed ${active ? C.primary : "#E0DBD0"}`,
+      borderRadius: 14,
+      padding: 18,
+      textAlign: "center",
+      background: active ? "#F0F7F2" : "#FAFAF8",
+      marginBottom: 12,
+      cursor: "pointer",
+      transition: "all 0.15s",
+    }),
+    dropText: { fontSize: 12.5, color: "#5A5A5A", lineHeight: 1.7 },
+    grid: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, marginBottom: 12 },
+    thumb: { position: "relative", borderRadius: 10, overflow: "hidden", aspectRatio: "1", background: "#eee" },
+    thumbImg: { width: "100%", height: "100%", objectFit: "cover" },
+    mainBadge: { position: "absolute", top: 4, right: 4, background: C.gold, color: "#fff", fontSize: 9, fontWeight: 900, padding: "2px 6px", borderRadius: 6 },
+    removeBtn: { position: "absolute", top: 4, left: 4, background: "rgba(0,0,0,0.6)", color: "#fff", border: "none", borderRadius: "50%", width: 22, height: 22, fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" },
+    setMainBtn: { position: "absolute", bottom: 4, left: 4, right: 4, background: "rgba(0,0,0,0.6)", color: "#fff", border: "none", borderRadius: 6, fontSize: 9, padding: "3px 0", cursor: "pointer" },
+    fileInput: { display: "none" },
+    uploadBtn: { padding: "8px 16px", borderRadius: 12, border: `1.5px solid ${C.primary}`, background: "#fff", color: C.primary, fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: "Tajawal, sans-serif" },
+    videoRow: { display: "flex", gap: 8, alignItems: "center", marginTop: 6 },
+    videoInput: { flex: 1, padding: "9px 11px", borderRadius: 10, border: "1.5px solid #E0DBD0", fontSize: 12, direction: "ltr", textAlign: "left" },
+  };
+
+  const handleFiles = async (files) => {
+    if (!files?.length) return;
+    setUploading(true);
+    try {
+      for (const file of Array.from(files)) {
+        if (!file.type.startsWith("image/")) continue;
+        const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+        const path = `listings/${listingId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+        const url = await uploadToListingImages(path, file, { contentType: file.type });
+        if (url) {
+          setImages(prev => [...prev, { url, is_main: prev.length === 0 }]);
+        }
+      }
+    } catch (e) {
+      alert("فشل رفع الصورة: " + (e?.message || "خطأ غير معروف"));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handlePaste = async (e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const files = [];
+    for (const item of items) {
+      if (item.type.startsWith("image/")) {
+        const file = item.getAsFile();
+        if (file) files.push(file);
+      }
+    }
+    if (files.length) {
+      e.preventDefault();
+      await handleFiles(files);
+    }
+  };
+
+  const handleVideoFile = async (file) => {
+    if (!file || !file.type.startsWith("video/")) return;
+    setVideoUploading(true);
+    try {
+      const ext = (file.name.split(".").pop() || "mp4").toLowerCase();
+      const path = `listings/${listingId}/video-${Date.now()}.${ext}`;
+      const url = await uploadToListingImages(path, file, { contentType: file.type });
+      if (url) setVideoUrl(url);
+    } catch (e) {
+      alert("فشل رفع الفيديو: " + (e?.message || "خطأ غير معروف"));
+    } finally {
+      setVideoUploading(false);
+    }
+  };
+
+  return (
+    <div style={sx.wrap}>
+      <div
+        style={sx.dropZone(dragOver)}
+        onPaste={handlePaste}
+        tabIndex={0}
+        onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={e => {
+          e.preventDefault();
+          setDragOver(false);
+          handleFiles(e.dataTransfer.files);
+        }}
+        onClick={() => document.getElementById("admin-img-input")?.click()}
+      >
+        <div style={sx.dropText}>
+          📋 انسخ صورة والصقها هنا (Ctrl+V)<br/>
+          أو اسحب الصور هنا، أو اضغط للاختيار
+        </div>
+        <input
+          id="admin-img-input"
+          type="file"
+          accept="image/*"
+          multiple
+          style={sx.fileInput}
+          onChange={e => handleFiles(e.target.files)}
+        />
+      </div>
+
+      {uploading && <div style={{ ...sx.dropText, marginBottom: 10 }}>⏳ جارٍ رفع الصور...</div>}
+
+      {images.length > 0 && (
+        <div style={sx.grid}>
+          {images.map((img, i) => (
+            <div key={img.url + i} style={sx.thumb}>
+              <img src={img.url} alt="" style={sx.thumbImg} />
+              {img.is_main && <span style={sx.mainBadge}>رئيسية</span>}
+              <button
+                style={sx.removeBtn}
+                onClick={() => setImages(prev => prev.filter((_, idx) => idx !== i))}
+                title="حذف"
+              >×</button>
+              {!img.is_main && (
+                <button
+                  style={sx.setMainBtn}
+                  onClick={() => setImages(prev => prev.map((p, idx) => ({ ...p, is_main: idx === i })))}
+                >
+                  تعيين كرئيسية
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{ marginTop: 14 }}>
+        <div style={{ fontSize: 12, fontWeight: 800, color: C.primary, marginBottom: 6 }}>🎬 فيديو الإعلان</div>
+        <div style={sx.videoRow}>
+          <input
+            style={sx.videoInput}
+            placeholder="رابط الفيديو (أو ارفع ملفاً)"
+            value={videoUrl || ""}
+            onChange={e => setVideoUrl(e.target.value)}
+          />
+          <button
+            type="button"
+            style={sx.uploadBtn}
+            onClick={() => document.getElementById("admin-video-input")?.click()}
+          >
+            {videoUploading ? "⏳..." : "رفع فيديو"}
+          </button>
+          <input
+            id="admin-video-input"
+            type="file"
+            accept="video/*"
+            style={sx.fileInput}
+            onChange={e => handleVideoFile(e.target.files?.[0])}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminEditListingPage({ DC: DCProp }) {
   const DC = DCProp || C;
   const { id } = useParams();
@@ -246,6 +414,8 @@ export default function AdminEditListingPage({ DC: DCProp }) {
 
   const [original, setOriginal] = useState(null);
   const [values, setValues] = useState({});
+  const [images, setImages] = useState([]);
+  const [videoUrl, setVideoUrl] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState("");
@@ -283,6 +453,8 @@ export default function AdminEditListingPage({ DC: DCProp }) {
         initial[col.key] = formatForInput(row?.[col.key], col.type);
       });
       setValues(initial);
+      setImages((row?.listing_images || []).map(img => ({ url: img.url, is_main: !!img.is_main })));
+      setVideoUrl(row?.video_url || "");
       setLoading(false);
     })();
     return () => { alive = false; };
@@ -307,11 +479,24 @@ export default function AdminEditListingPage({ DC: DCProp }) {
       if (col.readonly) return;
       updates[col.key] = parseForSave(values[col.key], col.type);
     });
+    updates.video_url = videoUrl || null;
 
     try {
       const sb = getSupabase();
+
       const { error } = await sb.from("listings").update(updates).eq("id", id);
       if (error) throw error;
+
+      // استبدال صور الإعلان بالكامل بما هو موجود حالياً في الواجهة
+      const { error: delErr } = await sb.from("listing_images").delete().eq("listing_id", id);
+      if (delErr) throw delErr;
+
+      if (images.length) {
+        const rows = images.map(img => ({ listing_id: id, url: img.url, is_main: !!img.is_main }));
+        const { error: insErr } = await sb.from("listing_images").insert(rows);
+        if (insErr) throw insErr;
+      }
+
       setSavedMsg("✅ تم حفظ التعديلات بنجاح");
     } catch (e) {
       setErrorMsg("❌ فشل الحفظ: " + (e?.message || "خطأ غير معروف"));
@@ -396,6 +581,18 @@ export default function AdminEditListingPage({ DC: DCProp }) {
       </div>
 
       <div style={sx.body}>
+        <div style={sx.section}>
+          <div style={sx.sectionTitle}>🖼️ الصور والفيديو</div>
+          <MediaManager
+            listingId={id}
+            images={images}
+            setImages={setImages}
+            videoUrl={videoUrl}
+            setVideoUrl={setVideoUrl}
+            DC={DC}
+          />
+        </div>
+
         {SECTIONS.map(section => (
           <div key={section.title} style={sx.section}>
             <div style={sx.sectionTitle}>{section.title}</div>
