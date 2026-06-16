@@ -96,10 +96,15 @@ function DetailPage({
       setFromCache(false);
       setDetailCache(itemProp);
       warmListingImages(itemProp);
-      return;
+
+      // لا نوقف التنفيذ هنا؛ بيانات البطاقة قد تكون مختصرة
+      // ونحتاج إلى جلب النسخة الكاملة التي تتضمن video_url والصور والتفاصيل.
     }
 
-    const id = urlId || (itemProp ? sessionStorage.getItem("lastDetailId") : null);
+    const id =
+      urlId ||
+      itemProp?.id ||
+      sessionStorage.getItem("lastDetailId");
 
     if (!id || !Number.isFinite(Number(id))) {
       setFetchError(true);
@@ -165,6 +170,7 @@ function DetailPage({
           }
 
           setItem(mapped);
+          setFetchError(false);
           setFromCache(false);
           setDetailCache(mapped);
           warmListingImages(mapped);
@@ -190,7 +196,7 @@ function DetailPage({
     tryFetch();
 
     return () => clearTimeout(timer);
-  }, [itemProp, urlId, prevPage, user?.id, user?.role, user?.isAdmin]);
+  }, [itemProp, urlId, prevPage, user?.id, user?.role, user?.isAdmin, cacheDetail]);
 
   const [tab, setTab] = useState("details");
   const [showReport, setShowReport] = useState(false);
