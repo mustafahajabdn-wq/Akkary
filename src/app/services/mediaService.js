@@ -4,7 +4,24 @@ import { updateProfile } from "./profileService.js";
 const LISTING_IMAGES_BUCKET = "listing-images";
 const SAFE_STORAGE_PATH = /^[\w./-]+$/;
 
-export async function uploadToR2(file, contentType = "image/jpeg") {
+// محفوظ للاستخدام لاحقاً عند الانتقال إلى Cloudflare R2.
+// الرفع الحالي يتم إلى Supabase Storage عبر uploadToListingImages.
+const R2_PUBLIC_BASE =
+  "https://pub-587125c6eea7400b94f07873fcd1899b.r2.dev";
+
+const SUPABASE_FUNCTIONS_URL =
+  "https://tskjbzlnbldoxatpcaxi.supabase.co/functions/v1";
+
+/**
+ * رفع ملف إلى Cloudflare R2.
+ *
+ * هذه الدالة محفوظة للاستخدام لاحقاً، لكنها غير مستخدمة حالياً
+ * من uploadToListingImages.
+ */
+export async function uploadToR2(
+  file,
+  contentType = "image/jpeg"
+) {
   if (!file) return null;
 
   const sb = getSupabase();
@@ -27,7 +44,8 @@ export async function uploadToR2(file, contentType = "image/jpeg") {
   if (error) {
     console.error("generate-r2-url failed:", error);
 
-    let details = error.message || String(error);
+    let details =
+      error.message || String(error);
 
     try {
       if (error.context instanceof Response) {
@@ -39,7 +57,7 @@ export async function uploadToR2(file, contentType = "image/jpeg") {
         }
       }
     } catch {
-      // تجاهل فشل قراءة جسم الاستجابة
+      // تجاهل فشل قراءة جسم الاستجابة.
     }
 
     throw new Error(
@@ -47,7 +65,10 @@ export async function uploadToR2(file, contentType = "image/jpeg") {
     );
   }
 
-  const { presignedUrl, publicUrl } = data || {};
+  const {
+    presignedUrl,
+    publicUrl,
+  } = data || {};
 
   if (!presignedUrl) {
     throw new Error(
@@ -55,19 +76,16 @@ export async function uploadToR2(file, contentType = "image/jpeg") {
     );
   }
 
-  if (!publicUrl) {
-    throw new Error(
-      "R2 URL generation failed: no publicUrl returned"
-    );
-  }
-
-  const uploadRes = await fetch(presignedUrl, {
-    method: "PUT",
-    headers: {
-      "Content-Type": contentType,
-    },
-    body: file,
-  });
+  const uploadRes = await fetch(
+    presignedUrl,
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": contentType,
+      },
+      body: file,
+    }
+  );
 
   if (!uploadRes.ok) {
     const responseText =
@@ -80,13 +98,29 @@ export async function uploadToR2(file, contentType = "image/jpeg") {
     );
   }
 
-  return publicUrl;
+  if (publicUrl) {
+    return publicUrl;
+  }
+
+  const objectKey = data?.objectKey;
+
+  if (objectKey && R2_PUBLIC_BASE) {
+    return `${R2_PUBLIC_BASE.replace(/\/+$/, "")}/${objectKey}`;
+  }
+
+  throw new Error(
+    "R2 upload succeeded but no public URL was returned"
+  );
 }
 
+/**
+ * استخراج مسار الملف من رابط Supabase Storage أو من مسار مباشر.
+ */
 export function extractListingStoragePath(value) {
   if (!value) return null;
 
   const raw = String(value).trim();
+
   if (!raw) return null;
 
   try {
@@ -177,14 +211,20 @@ function uniqueCleanPaths(paths = []) {
 function chunk(arr, size) {
   const out = [];
 
-  for (let i = 0; i < arr.length; i += size) {
+  for (
+    let i = 0;
+    i < arr.length;
+    i += size
+  ) {
     out.push(arr.slice(i, i + size));
   }
 
   return out;
 }
 
-export function extractListingImagePaths(values = []) {
+export function extractListingImagePaths(
+  values = []
+) {
   return uniqueCleanPaths(
     (Array.isArray(values) ? values : [])
       .map(extractListingStoragePath)
@@ -192,17 +232,109 @@ export function extractListingImagePaths(values = []) {
   );
 }
 
+/**
+ * الرفع الحالي إلى Supabase Storage.
+ *
+ * Bucket:
+ * listing-images
+ *
+ * عند الانتقال إلى R2 لاحقاً يمكن تغيير جسم هذه الدالة
+ * لاستدعاء uploadToR2 بدلاً من Supabase Storage.
+ */
 export async function uploadToListingImages(
   path,
   file,
   options = {}
 ) {
+  if (!path || !file) {
+    throw new Error(
+      "مسار الملف أو الملف غير موجود"
+    );
+  }
+
+  const sb = getSupabase();
+
+  if (!sb) {
+    throw new Error(
+      "Supabase client unavailable"
+    );
+  }
+
+  const cleanPath = String(path)
+    .trim()
+    .replace(/^\/+/, "");
+
+  if (
+    !cleanPath ||
+    cleanPath.includes("..") ||
+    cleanPath.includes("\\") ||
+    !SAFE_STORAGE_PATH.test(cleanPath)
+  ) {
+    throw new Error(
+      "مسار رفع الصورة غير صالح"
+    );
+  }
+
   const contentType =
     options.contentType ||
-    file?.type ||
-    "image/jpeg";
+    file.type ||
+    "application/octet-stream";
 
-  return uploadToR2(file, contentType);
+  const cacheControl =
+    String(
+      options.cacheControl || "3600"
+    );
+
+  const upsert =
+    options.upsert ?? true;
+
+  const {
+    data: uploadData,
+    error: uploadError,
+  } = await sb.storage
+    .from(LISTING_IMAGES_BUCKET)
+    .upload(
+      cleanPath,
+      file,
+      {
+        contentType,
+        cacheControl,
+        upsert,
+      }
+    );
+
+  if (uploadError) {
+    console.error(
+      "Supabase Storage upload failed:",
+      uploadError
+    );
+
+    throw new Error(
+      `فشل رفع الملف إلى Supabase: ${
+        uploadError.message ||
+        "خطأ غير معروف"
+      }`
+    );
+  }
+
+  const finalPath =
+    uploadData?.path || cleanPath;
+
+  const { data: publicData } =
+    sb.storage
+      .from(LISTING_IMAGES_BUCKET)
+      .getPublicUrl(finalPath);
+
+  const publicUrl =
+    publicData?.publicUrl || null;
+
+  if (!publicUrl) {
+    throw new Error(
+      "تم رفع الملف ولكن تعذر إنشاء رابطه العام"
+    );
+  }
+
+  return publicUrl;
 }
 
 function getListingImagePublicUrl(path) {
@@ -210,8 +342,7 @@ function getListingImagePublicUrl(path) {
 
   if (!sb || !path) return null;
 
-  const { data } = sb
-    .storage
+  const { data } = sb.storage
     .from(LISTING_IMAGES_BUCKET)
     .getPublicUrl(path);
 
@@ -221,7 +352,8 @@ function getListingImagePublicUrl(path) {
 export async function removeListingImagePaths(
   paths = []
 ) {
-  const clean = uniqueCleanPaths(paths);
+  const clean =
+    uniqueCleanPaths(paths);
 
   if (!clean.length) {
     return {
@@ -233,15 +365,21 @@ export async function removeListingImagePaths(
   const sb = getSupabase();
 
   if (!sb) {
-    throw new Error("Supabase client unavailable");
+    throw new Error(
+      "Supabase client unavailable"
+    );
   }
 
   let removed = 0;
   const removedData = [];
 
-  for (const batch of chunk(clean, 50)) {
-    const { data, error } = await sb
-      .storage
+  for (
+    const batch of chunk(clean, 50)
+  ) {
+    const {
+      data,
+      error,
+    } = await sb.storage
       .from(LISTING_IMAGES_BUCKET)
       .remove(batch);
 
@@ -255,10 +393,13 @@ export async function removeListingImagePaths(
       throw error;
     }
 
-    removed += data?.length || batch.length;
+    removed +=
+      data?.length || batch.length;
 
     removedData.push(
-      ...(Array.isArray(data) ? data : [])
+      ...(Array.isArray(data)
+        ? data
+        : [])
     );
   }
 
@@ -272,14 +413,20 @@ export async function removeListingImagePaths(
 export async function removeListingImageUrls(
   urls = []
 ) {
-  const paths = extractListingImagePaths(urls);
-  return removeListingImagePaths(paths);
+  const paths =
+    extractListingImagePaths(urls);
+
+  return removeListingImagePaths(
+    paths
+  );
 }
 
 export async function removeListingMediaUrls(
   urls = []
 ) {
-  return removeListingImageUrls(urls);
+  return removeListingImageUrls(
+    urls
+  );
 }
 
 export async function uploadProfileImage(
@@ -288,23 +435,31 @@ export async function uploadProfileImage(
   type = "avatar",
   contentType = "image/jpeg"
 ) {
-  if (!userId || !file) return null;
+  if (!userId || !file) {
+    return null;
+  }
 
   const sb = getSupabase();
-  if (!sb) return null;
+
+  if (!sb) {
+    return null;
+  }
 
   const field =
     type === "avatar"
       ? "avatar_url"
       : "cover_url";
 
-  const { data: oldProfile } = await sb
+  const {
+    data: oldProfile,
+  } = await sb
     .from("profiles")
     .select(field)
     .eq("id", userId)
     .maybeSingle();
 
-  const oldUrl = oldProfile?.[field] || null;
+  const oldUrl =
+    oldProfile?.[field] || null;
 
   const path =
     `profiles/${userId}/` +
@@ -316,10 +471,13 @@ export async function uploadProfileImage(
       file,
       {
         contentType,
+        upsert: true,
       }
     );
 
-  const { error } = await updateProfile(
+  const {
+    error,
+  } = await updateProfile(
     userId,
     {
       [field]: publicUrl,
@@ -334,7 +492,10 @@ export async function uploadProfileImage(
     throw error;
   }
 
-  if (oldUrl && oldUrl !== publicUrl) {
+  if (
+    oldUrl &&
+    oldUrl !== publicUrl
+  ) {
     await removeListingImageUrls(
       [oldUrl]
     ).catch(error => {
@@ -380,7 +541,9 @@ export async function deleteProfileImage(
     .eq("id", userId)
     .maybeSingle();
 
-  if (fetchError) throw fetchError;
+  if (fetchError) {
+    throw fetchError;
+  }
 
   const oldUrl =
     oldProfile?.[field] || null;
@@ -393,13 +556,14 @@ export async function deleteProfileImage(
     };
   }
 
-  const { error: updateError } =
-    await updateProfile(
-      userId,
-      {
-        [field]: null,
-      }
-    );
+  const {
+    error: updateError,
+  } = await updateProfile(
+    userId,
+    {
+      [field]: null,
+    }
+  );
 
   if (updateError) {
     throw updateError;
@@ -426,9 +590,14 @@ async function uploadListingFileViaRest(
   path,
   file,
   accessToken,
-  contentType = "application/octet-stream"
+  contentType =
+    "application/octet-stream"
 ) {
-  if (!path || !file || !accessToken) {
+  if (
+    !path ||
+    !file ||
+    !accessToken
+  ) {
     throw new Error(
       "Missing upload parameters"
     );
@@ -448,15 +617,32 @@ async function uploadListingFileViaRest(
     supabaseUrl ||
     "https://tskjbzlnbldoxatpcaxi.supabase.co";
 
+  const cleanPath = String(path)
+    .trim()
+    .replace(/^\/+/, "");
+
+  if (
+    !cleanPath ||
+    cleanPath.includes("..") ||
+    cleanPath.includes("\\") ||
+    !SAFE_STORAGE_PATH.test(cleanPath)
+  ) {
+    throw new Error(
+      "مسار رفع الملف غير صالح"
+    );
+  }
+
   const res = await fetch(
     `${baseUrl}/storage/v1/object/` +
-    `${LISTING_IMAGES_BUCKET}/${path}`,
+    `${LISTING_IMAGES_BUCKET}/` +
+    `${cleanPath}`,
     {
       method: "POST",
       headers: {
         Authorization:
           `Bearer ${accessToken}`,
-        "Content-Type": contentType,
+        "Content-Type":
+          contentType,
         "x-upsert": "true",
       },
       body: file,
@@ -465,14 +651,19 @@ async function uploadListingFileViaRest(
 
   if (!res.ok) {
     const txt =
-      await res.text().catch(() => "");
+      await res
+        .text()
+        .catch(() => "");
 
     throw new Error(
-      txt || `HTTP ${res.status}`
+      txt ||
+      `HTTP ${res.status}`
     );
   }
 
-  return getListingImagePublicUrl(path);
+  return getListingImagePublicUrl(
+    cleanPath
+  );
 }
 
 export async function uploadListingFileWithFallback(
@@ -496,7 +687,14 @@ export async function uploadListingFileWithFallback(
       }
     );
   } catch (error) {
-    if (!accessToken) throw error;
+    if (!accessToken) {
+      throw error;
+    }
+
+    console.warn(
+      "Supabase SDK upload failed, trying REST fallback:",
+      error
+    );
 
     return uploadListingFileViaRest(
       path,
@@ -506,3 +704,10 @@ export async function uploadListingFileWithFallback(
     );
   }
 }
+
+// تصدير الثوابت لأغراض الفحص أو الانتقال إلى R2 لاحقاً.
+export {
+  LISTING_IMAGES_BUCKET,
+  R2_PUBLIC_BASE,
+  SUPABASE_FUNCTIONS_URL,
+};
