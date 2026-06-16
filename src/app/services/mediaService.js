@@ -8,16 +8,18 @@ const SUPABASE_FUNCTIONS_URL = "https://tskjbzlnbldoxatpcaxi.supabase.co/functio
 
 export async function uploadToR2(file, contentType = "image/jpeg") {
   if (!file) return null;
-  const res = await fetch(`${SUPABASE_FUNCTIONS_URL}/generate-r2-url`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ fileName: file.name || `image_${Date.now()}.jpg`, contentType }),
+
+  const sb = getSupabase();
+  // استخدام supabase.functions.invoke يحقن JWT المستخدم المسجّل دخوله تلقائياً
+  const { data, error } = await sb.functions.invoke("generate-r2-url", {
+    body: { fileName: file.name || `image_${Date.now()}.jpg`, contentType },
   });
-  if (!res.ok) {
-    const txt = await res.text().catch(() => "");
-    throw new Error(`R2 URL generation failed: ${txt || res.status}`);
-  }
-  const { presignedUrl, publicUrl } = await res.json();
+
+  if (error) throw new Error(`R2 URL generation failed: ${error.message || error}`);
+
+  const { presignedUrl, publicUrl } = data || {};
+  if (!presignedUrl) throw new Error("R2 URL generation failed: no presignedUrl returned");
+
   const uploadRes = await fetch(presignedUrl, { method: "PUT", headers: { "Content-Type": contentType }, body: file });
   if (!uploadRes.ok) throw new Error(`R2 upload failed: ${uploadRes.status}`);
   return publicUrl;
