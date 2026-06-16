@@ -3,6 +3,27 @@ import { updateProfile } from "./profileService.js";
 
 const LISTING_IMAGES_BUCKET = "listing-images";
 const SAFE_STORAGE_PATH = /^[\w./-]+$/;
+const R2_PUBLIC_BASE = "https://pub-587125c6eea7400b94f07873fcd1899b.r2.dev";
+const SUPABASE_FUNCTIONS_URL = "https://tskjbzlnbldoxatpcaxi.supabase.co/functions/v1";
+
+export async function uploadToR2(file, contentType = "image/jpeg") {
+  if (!file) return null;
+  const res = await fetch(`${SUPABASE_FUNCTIONS_URL}/generate-r2-url`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ fileName: file.name || `image_${Date.now()}.jpg`, contentType }),
+  });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(`R2 URL generation failed: ${txt || res.status}`);
+  }
+  const { presignedUrl, publicUrl } = await res.json();
+  const uploadRes = await fetch(presignedUrl, { method: "PUT", headers: { "Content-Type": contentType }, body: file });
+  if (!uploadRes.ok) throw new Error(`R2 upload failed: ${uploadRes.status}`);
+  return publicUrl;
+}
+
+
 
 export function extractListingStoragePath(value) {
   if (!value) return null;
@@ -98,26 +119,8 @@ export function extractListingImagePaths(values = []) {
 }
 
 export async function uploadToListingImages(path, file, options = {}) {
-  const sb = getSupabase();
-
-  if (!sb || !path || !file) return null;
-
-  const { error } = await sb
-    .storage
-    .from(LISTING_IMAGES_BUCKET)
-    .upload(path, file, {
-      upsert: true,
-      ...options
-    });
-
-  if (error) throw error;
-
-  const { data } = sb
-    .storage
-    .from(LISTING_IMAGES_BUCKET)
-    .getPublicUrl(path);
-
-  return data?.publicUrl || null;
+  const contentType = options.contentType || file?.type || "image/jpeg";
+  return uploadToR2(file, contentType);
 }
 
 function getListingImagePublicUrl(path) {
