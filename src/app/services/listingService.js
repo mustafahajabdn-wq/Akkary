@@ -220,8 +220,8 @@ export async function fetchListingDetail(listingId, options = {}) {
   if (publicOnly) {
     query = query
       .eq("status", "active")
-    .eq("admin_status", "approved")
-    .lte("created_at", new Date().toISOString());
+      .eq("admin_status", "approved")
+      .lte("created_at", new Date().toISOString());
   }
 
   const { data, error } = await query.maybeSingle();
@@ -349,7 +349,22 @@ export async function incrementListingViews(listingId, currentViews = 0) {
   if (!listingId) return null;
 
   const sb = getSupabase();
-  const nextViews = Number(currentViews || 0) + 1;
+  if (!sb) return null;
+
+  const { data: fresh, error: fetchError } = await sb
+    .from("listings")
+    .select("views")
+    .eq("id", listingId)
+    .maybeSingle();
+
+  if (fetchError) {
+    console.warn("[listingService] incrementListingViews fetch", fetchError);
+    return null;
+  }
+
+  const dbViews = Number(fresh?.views || 0);
+  const uiViews = Number(currentViews || 0);
+  const nextViews = Math.max(dbViews, uiViews) + 1;
 
   const { error } = await sb
     .from("listings")
@@ -357,7 +372,7 @@ export async function incrementListingViews(listingId, currentViews = 0) {
     .eq("id", listingId);
 
   if (error) {
-    console.warn("[listingService] incrementListingViews", error);
+    console.warn("[listingService] incrementListingViews update", error);
     return null;
   }
 
@@ -461,7 +476,6 @@ function isFilledFilterValue(value) {
 function escapePostgrestLikeValue(value) {
   return String(value).replace(/[%*_]/g, "").replace(/[(),]/g, "").trim();
 }
-
 
 function expandFacingSearchValues(value) {
   const raw = String(value || "").trim();
@@ -572,14 +586,13 @@ function applyApprovedListingsQueryFilters(query, filterInput = {}) {
     if (categoryValues.length === 1) query = query.eq("category", categoryValues[0]);
     else if (categoryValues.length > 1) query = query.in("category", categoryValues);
   }
+
   const pricedOnly = advanced.pricedOnly === true || advanced.pricedOnly === "true" || advanced.priceMode === "priced";
   const hasPriceRange = isFilledFilterValue(advanced.minPrice) || isFilledFilterValue(advanced.maxPrice);
   const hasCurrencyFilter = isFilledFilterValue(advanced.currency);
 
   if (hasCurrencyFilter) query = query.eq("currency", advanced.currency);
 
-  // عند تفعيل خيار "إظهار فقط الإعلانات المذكور سعرها" أو استعمال أي فلتر سعر،
-  // لا تُعرض إعلانات السعر عند التواصل لأنها مخزنة بسعر 0.
   if (pricedOnly || hasPriceRange || hasCurrencyFilter) {
     query = query.gt("price", 0);
   }
@@ -605,8 +618,6 @@ function applyApprovedListingsQueryFilters(query, filterInput = {}) {
   const ownership = normalizeTextSearchValue(advanced.ownership);
   if (ownership) query = query.ilike("ownership", `%${ownership}%`);
 
-  // الجهة: الإضافة تحفظ أحياناً "شمال/جنوب/شرق/غرب"،
-  // والفلتر يعرض "شمالي/جنوبي/شرقي/غربي"؛ لذلك نستخدم OR بالمرادفات.
   const facingOr = buildFacingOrFilter(advanced.facing);
   if (facingOr) query = query.or(facingOr);
 
@@ -685,4 +696,4 @@ export function subscribeToListingsChanges(onChange) {
     .subscribe();
 
   return () => sb.removeChannel(ch);
-                  }
+}
