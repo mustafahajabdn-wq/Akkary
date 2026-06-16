@@ -3,29 +3,85 @@ import { updateProfile } from "./profileService.js";
 
 const LISTING_IMAGES_BUCKET = "listing-images";
 const SAFE_STORAGE_PATH = /^[\w./-]+$/;
-const R2_PUBLIC_BASE = "https://pub-587125c6eea7400b94f07873fcd1899b.r2.dev";
-const SUPABASE_FUNCTIONS_URL = "https://tskjbzlnbldoxatpcaxi.supabase.co/functions/v1";
 
 export async function uploadToR2(file, contentType = "image/jpeg") {
   if (!file) return null;
 
   const sb = getSupabase();
-  // استخدام supabase.functions.invoke يحقن JWT المستخدم المسجّل دخوله تلقائياً
-  const { data, error } = await sb.functions.invoke("generate-r2-url", {
-    body: { fileName: file.name || `image_${Date.now()}.jpg`, contentType },
-  });
 
-  if (error) throw new Error(`R2 URL generation failed: ${error.message || error}`);
+  if (!sb) {
+    throw new Error("Supabase client unavailable");
+  }
+
+  const { data, error } = await sb.functions.invoke(
+    "generate-r2-url",
+    {
+      body: {
+        fileName:
+          file.name || `image_${Date.now()}.jpg`,
+        contentType,
+      },
+    }
+  );
+
+  if (error) {
+    console.error("generate-r2-url failed:", error);
+
+    let details = error.message || String(error);
+
+    try {
+      if (error.context instanceof Response) {
+        const responseBody =
+          await error.context.clone().text();
+
+        if (responseBody) {
+          details += ` — ${responseBody}`;
+        }
+      }
+    } catch {
+      // تجاهل فشل قراءة جسم الاستجابة
+    }
+
+    throw new Error(
+      `R2 URL generation failed: ${details}`
+    );
+  }
 
   const { presignedUrl, publicUrl } = data || {};
-  if (!presignedUrl) throw new Error("R2 URL generation failed: no presignedUrl returned");
 
-  const uploadRes = await fetch(presignedUrl, { method: "PUT", headers: { "Content-Type": contentType }, body: file });
-  if (!uploadRes.ok) throw new Error(`R2 upload failed: ${uploadRes.status}`);
+  if (!presignedUrl) {
+    throw new Error(
+      "R2 URL generation failed: no presignedUrl returned"
+    );
+  }
+
+  if (!publicUrl) {
+    throw new Error(
+      "R2 URL generation failed: no publicUrl returned"
+    );
+  }
+
+  const uploadRes = await fetch(presignedUrl, {
+    method: "PUT",
+    headers: {
+      "Content-Type": contentType,
+    },
+    body: file,
+  });
+
+  if (!uploadRes.ok) {
+    const responseText =
+      await uploadRes.text().catch(() => "");
+
+    throw new Error(
+      responseText
+        ? `R2 upload failed: ${uploadRes.status} — ${responseText}`
+        : `R2 upload failed: ${uploadRes.status}`
+    );
+  }
+
   return publicUrl;
 }
-
-
 
 export function extractListingStoragePath(value) {
   if (!value) return null;
@@ -37,15 +93,26 @@ export function extractListingStoragePath(value) {
     const parsed = new URL(raw);
     const path = parsed.pathname;
 
-    const publicMarker = `/storage/v1/object/public/${LISTING_IMAGES_BUCKET}/`;
-    const signedMarker = `/storage/v1/object/sign/${LISTING_IMAGES_BUCKET}/`;
+    const publicMarker =
+      `/storage/v1/object/public/${LISTING_IMAGES_BUCKET}/`;
+
+    const signedMarker =
+      `/storage/v1/object/sign/${LISTING_IMAGES_BUCKET}/`;
 
     let bucketPath = null;
 
     if (path.includes(publicMarker)) {
-      bucketPath = path.slice(path.indexOf(publicMarker) + publicMarker.length);
+      bucketPath =
+        path.slice(
+          path.indexOf(publicMarker) +
+          publicMarker.length
+        );
     } else if (path.includes(signedMarker)) {
-      bucketPath = path.slice(path.indexOf(signedMarker) + signedMarker.length);
+      bucketPath =
+        path.slice(
+          path.indexOf(signedMarker) +
+          signedMarker.length
+        );
     }
 
     if (!bucketPath) return null;
@@ -84,13 +151,18 @@ export function extractListingStoragePath(value) {
   }
 }
 
-export const extractListingImagePath = extractListingStoragePath;
+export const extractListingImagePath =
+  extractListingStoragePath;
 
 function uniqueCleanPaths(paths = []) {
   return [
     ...new Set(
       (Array.isArray(paths) ? paths : [])
-        .map(path => String(path || "").trim().replace(/^\/+/, ""))
+        .map(path =>
+          String(path || "")
+            .trim()
+            .replace(/^\/+/, "")
+        )
         .filter(
           path =>
             path &&
@@ -98,7 +170,7 @@ function uniqueCleanPaths(paths = []) {
             !path.includes("\\") &&
             SAFE_STORAGE_PATH.test(path)
         )
-    )
+    ),
   ];
 }
 
@@ -120,8 +192,16 @@ export function extractListingImagePaths(values = []) {
   );
 }
 
-export async function uploadToListingImages(path, file, options = {}) {
-  const contentType = options.contentType || file?.type || "image/jpeg";
+export async function uploadToListingImages(
+  path,
+  file,
+  options = {}
+) {
+  const contentType =
+    options.contentType ||
+    file?.type ||
+    "image/jpeg";
+
   return uploadToR2(file, contentType);
 }
 
@@ -138,18 +218,23 @@ function getListingImagePublicUrl(path) {
   return data?.publicUrl || null;
 }
 
-export async function removeListingImagePaths(paths = []) {
+export async function removeListingImagePaths(
+  paths = []
+) {
   const clean = uniqueCleanPaths(paths);
 
   if (!clean.length) {
     return {
       removed: 0,
-      paths: []
+      paths: [],
     };
   }
 
   const sb = getSupabase();
-  if (!sb) throw new Error("Supabase client unavailable");
+
+  if (!sb) {
+    throw new Error("Supabase client unavailable");
+  }
 
   let removed = 0;
   const removedData = [];
@@ -161,27 +246,39 @@ export async function removeListingImagePaths(paths = []) {
       .remove(batch);
 
     if (error) {
-      console.error("Storage delete failed:", error, batch);
+      console.error(
+        "Storage delete failed:",
+        error,
+        batch
+      );
+
       throw error;
     }
 
     removed += data?.length || batch.length;
-    removedData.push(...(Array.isArray(data) ? data : []));
+
+    removedData.push(
+      ...(Array.isArray(data) ? data : [])
+    );
   }
 
   return {
     removed,
     paths: clean,
-    data: removedData
+    data: removedData,
   };
 }
 
-export async function removeListingImageUrls(urls = []) {
+export async function removeListingImageUrls(
+  urls = []
+) {
   const paths = extractListingImagePaths(urls);
   return removeListingImagePaths(paths);
 }
 
-export async function removeListingMediaUrls(urls = []) {
+export async function removeListingMediaUrls(
+  urls = []
+) {
   return removeListingImageUrls(urls);
 }
 
@@ -196,7 +293,10 @@ export async function uploadProfileImage(
   const sb = getSupabase();
   if (!sb) return null;
 
-  const field = type === "avatar" ? "avatar_url" : "cover_url";
+  const field =
+    type === "avatar"
+      ? "avatar_url"
+      : "cover_url";
 
   const { data: oldProfile } = await sb
     .from("profiles")
@@ -205,39 +305,76 @@ export async function uploadProfileImage(
     .maybeSingle();
 
   const oldUrl = oldProfile?.[field] || null;
-  const path = `profiles/${userId}/${type}_${Date.now()}.jpg`;
 
-  const publicUrl = await uploadToListingImages(path, file, {
-    contentType
-  });
+  const path =
+    `profiles/${userId}/` +
+    `${type}_${Date.now()}.jpg`;
 
-  const { error } = await updateProfile(userId, {
-    [field]: publicUrl
-  });
+  const publicUrl =
+    await uploadToListingImages(
+      path,
+      file,
+      {
+        contentType,
+      }
+    );
+
+  const { error } = await updateProfile(
+    userId,
+    {
+      [field]: publicUrl,
+    }
+  );
 
   if (error) {
-    await removeListingImageUrls([publicUrl]).catch(() => {});
+    await removeListingImageUrls(
+      [publicUrl]
+    ).catch(() => {});
+
     throw error;
   }
 
   if (oldUrl && oldUrl !== publicUrl) {
-    await removeListingImageUrls([oldUrl]).catch(error => {
-      console.warn("failed to remove old profile image", error);
+    await removeListingImageUrls(
+      [oldUrl]
+    ).catch(error => {
+      console.warn(
+        "failed to remove old profile image",
+        error
+      );
     });
   }
 
   return publicUrl;
 }
 
-export async function deleteProfileImage(userId, type = "avatar") {
-  if (!userId) throw new Error("معرّف المستخدم غير موجود");
+export async function deleteProfileImage(
+  userId,
+  type = "avatar"
+) {
+  if (!userId) {
+    throw new Error(
+      "معرّف المستخدم غير موجود"
+    );
+  }
 
   const sb = getSupabase();
-  if (!sb) throw new Error("Supabase client unavailable");
 
-  const field = type === "avatar" ? "avatar_url" : "cover_url";
+  if (!sb) {
+    throw new Error(
+      "Supabase client unavailable"
+    );
+  }
 
-  const { data: oldProfile, error: fetchError } = await sb
+  const field =
+    type === "avatar"
+      ? "avatar_url"
+      : "cover_url";
+
+  const {
+    data: oldProfile,
+    error: fetchError,
+  } = await sb
     .from("profiles")
     .select(field)
     .eq("id", userId)
@@ -245,31 +382,43 @@ export async function deleteProfileImage(userId, type = "avatar") {
 
   if (fetchError) throw fetchError;
 
-  const oldUrl = oldProfile?.[field] || null;
+  const oldUrl =
+    oldProfile?.[field] || null;
 
   if (!oldUrl) {
     return {
       ok: true,
       deleted: false,
-      reason: "no_old_image"
+      reason: "no_old_image",
     };
   }
 
-  const { error: updateError } = await updateProfile(userId, {
-    [field]: null
-  });
+  const { error: updateError } =
+    await updateProfile(
+      userId,
+      {
+        [field]: null,
+      }
+    );
 
-  if (updateError) throw updateError;
+  if (updateError) {
+    throw updateError;
+  }
 
-  await removeListingImageUrls([oldUrl]).catch(error => {
-    console.warn("failed to remove deleted profile image", error);
+  await removeListingImageUrls(
+    [oldUrl]
+  ).catch(error => {
+    console.warn(
+      "failed to remove deleted profile image",
+      error
+    );
   });
 
   return {
     ok: true,
     deleted: true,
     field,
-    oldUrl
+    oldUrl,
   };
 }
 
@@ -280,32 +429,47 @@ async function uploadListingFileViaRest(
   contentType = "application/octet-stream"
 ) {
   if (!path || !file || !accessToken) {
-    throw new Error("Missing upload parameters");
+    throw new Error(
+      "Missing upload parameters"
+    );
   }
 
   const sb = getSupabase();
+
   const supabaseUrl =
     sb?.supabaseUrl ||
-    (typeof window !== "undefined" ? window?.__SUPABASE_URL__ : null);
+    (
+      typeof window !== "undefined"
+        ? window?.__SUPABASE_URL__
+        : null
+    );
 
-  const baseUrl = supabaseUrl || "https://tskjbzlnbldoxatpcaxi.supabase.co";
+  const baseUrl =
+    supabaseUrl ||
+    "https://tskjbzlnbldoxatpcaxi.supabase.co";
 
   const res = await fetch(
-    `${baseUrl}/storage/v1/object/${LISTING_IMAGES_BUCKET}/${path}`,
+    `${baseUrl}/storage/v1/object/` +
+    `${LISTING_IMAGES_BUCKET}/${path}`,
     {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        Authorization:
+          `Bearer ${accessToken}`,
         "Content-Type": contentType,
-        "x-upsert": "true"
+        "x-upsert": "true",
       },
-      body: file
+      body: file,
     }
   );
 
   if (!res.ok) {
-    const txt = await res.text().catch(() => "");
-    throw new Error(txt || `HTTP ${res.status}`);
+    const txt =
+      await res.text().catch(() => "");
+
+    throw new Error(
+      txt || `HTTP ${res.status}`
+    );
   }
 
   return getListingImagePublicUrl(path);
@@ -315,19 +479,30 @@ export async function uploadListingFileWithFallback(
   path,
   file,
   {
-    contentType = "application/octet-stream",
+    contentType =
+      "application/octet-stream",
     cacheControl,
-    accessToken
+    accessToken,
   } = {}
 ) {
   try {
-    return await uploadToListingImages(path, file, {
-      contentType,
-      cacheControl,
-      upsert: true
-    });
+    return await uploadToListingImages(
+      path,
+      file,
+      {
+        contentType,
+        cacheControl,
+        upsert: true,
+      }
+    );
   } catch (error) {
     if (!accessToken) throw error;
-    return uploadListingFileViaRest(path, file, accessToken, contentType);
+
+    return uploadListingFileViaRest(
+      path,
+      file,
+      accessToken,
+      contentType
+    );
   }
 }
