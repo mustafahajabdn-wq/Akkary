@@ -339,7 +339,7 @@ export default function AdminListings({
         accountType: "individual",
         daysOld: Math.floor((Date.now() - new Date(l.created_at)) / 86400000),
         time: "منذ " + timeAgo(l.created_at)
-      }} onPress={() => openDetail(l)} onHide={() => toggleHide(l)} onUnflag={() => unflagListing(l)} onDelete={() => deleteListing(l.id)} onApprove={() => approveListing(l.id)} onReject={() => rejectListing(l.id)} />)}
+      }} onPress={() => openDetail(l)} onHide={() => toggleHide(l)} onUnflag={() => unflagListing(l)} onDelete={() => deleteListing(l.id)} onApprove={() => approveListing(l.id)} onReject={() => rejectListing(l.id)} onEdit={() => window.open(`/admin/edit-listing/${l.id}`, "_blank")} />)}
       </div>
     </div>;
 }
