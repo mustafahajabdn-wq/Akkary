@@ -96,15 +96,10 @@ function DetailPage({
       setFromCache(false);
       setDetailCache(itemProp);
       warmListingImages(itemProp);
-
-      // لا نوقف التنفيذ هنا؛ بيانات البطاقة قد تكون مختصرة
-      // ونحتاج إلى جلب النسخة الكاملة التي تتضمن video_url والصور والتفاصيل.
+      return;
     }
 
-    const id =
-      urlId ||
-      itemProp?.id ||
-      sessionStorage.getItem("lastDetailId");
+    const id = urlId || (itemProp ? sessionStorage.getItem("lastDetailId") : null);
 
     if (!id || !Number.isFinite(Number(id))) {
       setFetchError(true);
@@ -170,7 +165,6 @@ function DetailPage({
           }
 
           setItem(mapped);
-          setFetchError(false);
           setFromCache(false);
           setDetailCache(mapped);
           warmListingImages(mapped);
@@ -196,7 +190,7 @@ function DetailPage({
     tryFetch();
 
     return () => clearTimeout(timer);
-  }, [itemProp, urlId, prevPage, user?.id, user?.role, user?.isAdmin, cacheDetail]);
+  }, [itemProp, urlId, prevPage, user?.id, user?.role, user?.isAdmin]);
 
   const [tab, setTab] = useState("details");
   const [showReport, setShowReport] = useState(false);
@@ -205,6 +199,7 @@ function DetailPage({
   const [showRating, setShowRating] = useState(false);
   const [activePhone, setActivePhone] = useState(0);
   const [viewCount, setViewCount] = useState(0);
+  const [refreshingViews, setRefreshingViews] = useState(false);
   const trackedMetaViewRef = useRef(null);
 
   const [geoCoords, setGeoCoords] = useState({
@@ -305,7 +300,7 @@ function DetailPage({
     const lastView = Number(localStorage.getItem(viewKey) || 0);
     const now = Date.now();
 
-    if (lastView && now - lastView < 5 * 60 * 1000) return;
+    if (lastView && now - lastView < 60 * 1000) return;
 
     const baseViews = Number(item?.views || 0);
 
@@ -319,6 +314,33 @@ function DetailPage({
       })
       .catch(() => {});
   }, [item?.id, fromCache]);
+
+  async function refreshViewsFromServer() {
+    if (!item?.id || refreshingViews) return;
+
+    try {
+      setRefreshingViews(true);
+
+      const fresh = await fetchListingDetail(item.id, {
+        publicOnly: false
+      });
+
+      if (!fresh) return;
+
+      const nextViews = Number(fresh.views || 0);
+      const nextItem = { ...item, ...fresh, views: nextViews };
+
+      setViewCount(nextViews);
+      setItem(nextItem);
+      setFromCache(false);
+      setDetailCache(nextItem);
+      if (cacheDetail) cacheDetail(nextItem);
+    } catch (error) {
+      console.warn("[DetailPage] refreshViewsFromServer", error);
+    } finally {
+      setRefreshingViews(false);
+    }
+  }
 
   const [poiLayers, setPoiLayers] = useState({});
   const [poiOpen, setPoiOpen] = useState(false);
@@ -976,11 +998,22 @@ function DetailPage({
               <div style={DS.descHeader}>
                 <div style={DS.descTitle(DC)}>{item?.title}</div>
 
-                <div style={DS.viewPill(DC)}>
-                  <span>{"👁"}</span>
+                <button
+                  type="button"
+                  onClick={refreshViewsFromServer}
+                  disabled={refreshingViews}
+                  title="تحديث عدد المشاهدات"
+                  style={{
+                    ...DS.viewPill(DC),
+                    border: "none",
+                    cursor: refreshingViews ? "wait" : "pointer",
+                    opacity: refreshingViews ? 0.75 : 1
+                  }}
+                >
+                  <span>{refreshingViews ? "⟳" : "👁"}</span>
                   <span style={DS.viewCount}>{viewCount || 0}</span>
                   <span>مشاهدة</span>
-                </div>
+                </button>
               </div>
 
               <div style={DS.descText(DC)}>
