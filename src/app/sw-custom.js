@@ -5,7 +5,7 @@ import { CacheFirst, NetworkFirst } from 'workbox-strategies';
 import { ExpirationPlugin } from 'workbox-expiration';
 import { CacheableResponsePlugin } from 'workbox-cacheable-response';
 
-// تفعيل Service Worker الجديد فوراً بدون انتظار
+// تفعيل Service Worker  الجديد فوراً بدون انتظار
 self.skipWaiting();
 clientsClaim();
 
