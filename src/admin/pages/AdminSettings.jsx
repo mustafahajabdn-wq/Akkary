@@ -6,6 +6,7 @@ import { C } from "../../shared/constants/colors.js";
 import { IslamicPattern, Wave } from "../../shared/components/icons.jsx";
 import { S } from "../../shared/styles/primitives.js";
 import { DEFAULT_TRACKING_SETTINGS } from "../../shared/services/metaPixel.js";
+import { requestLocalCacheRefresh } from "../../shared/services/cacheVersionService.js";
 
 // مجموعات الإعدادات
 const GROUPS = {
@@ -125,6 +126,8 @@ export default function AdminSettings({
   const [settings, setSettings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(null);
+  const [forcingRefresh, setForcingRefresh] = useState(false);
+  const [forceMessage, setForceMessage] = useState("");
 
   useEffect(() => {
     load();
@@ -160,6 +163,36 @@ export default function AdminSettings({
     }
   }
 
+  async function forceRefreshForEveryone() {
+    if (forcingRefresh || user?.role !== "admin") return;
+
+    const confirmed = window.confirm(
+      "سيتم مسح كاش التطبيق وإعادة تحميله عند جميع المستخدمين المتصلين. هل تريد المتابعة؟"
+    );
+
+    if (!confirmed) return;
+
+    setForcingRefresh(true);
+    setForceMessage("");
+
+    const version = String(Date.now());
+
+    try {
+      await updateAppSetting("force_cache_version", version);
+      setForceMessage("تم إرسال أمر التحديث إلى جميع المستخدمين.");
+
+      // يشمل جهاز المدير نفسه، ثم تعيد الصفحة التحميل بأحدث نسخة.
+      window.setTimeout(() => {
+        requestLocalCacheRefresh(version);
+      }, 700);
+    } catch (error) {
+      console.error("force cache refresh error:", error);
+      setForceMessage("");
+      alert(error?.message || "تعذر إرسال أمر تحديث التطبيق");
+      setForcingRefresh(false);
+    }
+  }
+
   const settingMap = Object.fromEntries(settings.map(s => [s.key, s]));
 
   return (
@@ -183,6 +216,87 @@ export default function AdminSettings({
           <div style={S.emptyStateCentered}>⏳</div>
         ) : (
           <>
+            {user?.role === "admin" && (
+              <div style={{ marginBottom: 18 }}>
+                <div
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 800,
+                    color: DC?.text3 || "#8A9E90",
+                    marginBottom: 8,
+                    letterSpacing: 0.5
+                  }}
+                >
+                  🔄 تحديث التطبيق لدى الجميع
+                </div>
+
+                <div
+                  style={{
+                    background: DC?.white || "#fff",
+                    borderRadius: 12,
+                    border: "1.5px solid " + (DC?.border || "#DDE8E1"),
+                    padding: "16px"
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 800,
+                      color: DC?.text || "#1A2E20",
+                      marginBottom: 6
+                    }}
+                  >
+                    مسح الكاش وإعادة تحميل التطبيق
+                  </div>
+
+                  <div
+                    style={{
+                      fontSize: 11,
+                      lineHeight: 1.8,
+                      color: DC?.text2 || "#64748B",
+                      marginBottom: 12
+                    }}
+                  >
+                    استخدمه بعد نشر تحديث مهم. يصل الأمر فورًا عبر Realtime، مع فحص احتياطي دوري للأجهزة التي لم يصلها الاتصال المباشر.
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={forceRefreshForEveryone}
+                    disabled={forcingRefresh}
+                    style={{
+                      width: "100%",
+                      padding: "11px 14px",
+                      borderRadius: 10,
+                      border: "none",
+                      background: forcingRefresh ? "#94A3B8" : "#DC2626",
+                      color: "#fff",
+                      fontSize: 13,
+                      fontWeight: 900,
+                      cursor: forcingRefresh ? "wait" : "pointer",
+                      fontFamily: "inherit"
+                    }}
+                  >
+                    {forcingRefresh ? "جارٍ إرسال التحديث..." : "🔄 إجبار الجميع على تحديث التطبيق"}
+                  </button>
+
+                  {forceMessage && (
+                    <div
+                      style={{
+                        marginTop: 9,
+                        fontSize: 11,
+                        fontWeight: 800,
+                        color: "#15803D",
+                        textAlign: "center"
+                      }}
+                    >
+                      {forceMessage}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {Object.entries(GROUPS).map(([groupLabel, keys]) => {
               const groupSettings = keys.map(k => settingMap[k]).filter(Boolean);
 
@@ -290,6 +404,7 @@ export default function AdminSettings({
 
                                 return (
                                   <button
+                                    type="button"
                                     key={o}
                                     onClick={() => save(s.key, o)}
                                     style={sx.s1(s, o, C, DC)}
@@ -309,6 +424,7 @@ export default function AdminSettings({
                               />
 
                               <button
+                                type="button"
                                 onClick={() =>
                                   save(
                                     s.key,
