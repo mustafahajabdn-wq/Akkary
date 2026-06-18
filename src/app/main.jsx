@@ -6,7 +6,7 @@ import { installGlobalErrorLogger } from "../shared/services/errorLogger.js";
 import { startVisitorPresence } from "../shared/services/visitorPresence.js";
 import { shouldStartVisitorPresence } from "../shared/utils/realtimePolicy.js";
 
-// ── تجاهل تحذير قفل Supabase (معروف وغير ضار) ──────────────────
+// ── تجاهل   تحذير قفل Supabase (معروف وغير ضار) ──────────────────
 // يحدث عندما يتسابق طلبان على auth token (تبويبين، أو OAuth retry + subscribe)
 if (typeof window !== "undefined") {
   window.addEventListener("unhandledrejection", event => {
