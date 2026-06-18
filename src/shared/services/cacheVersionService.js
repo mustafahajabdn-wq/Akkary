@@ -5,8 +5,10 @@ export const FORCE_CACHE_VERSION_KEY = "force_cache_version";
 const LOCAL_VERSION_KEY = "aqari_force_cache_version";
 const RELOAD_GUARD_KEY = "aqari_force_cache_reload_in_progress";
 const POLL_INTERVAL_MS = 60 * 1000;
+const EMPTY_BASELINE_VERSION = "0";
 
 let watcherStarted = false;
+let baselineReady = false;
 let realtimeChannel = null;
 let pollTimer = null;
 let messageListenerInstalled = false;
@@ -144,7 +146,6 @@ async function applyRemoteVersion(remoteVersion) {
 
   const localVersion = readLocalVersion();
 
-  // أول تشغيل بعد نشر الميزة: نعتمد القيمة الحالية دون إعادة تحميل متكرر.
   if (!localVersion) {
     writeLocalVersion(normalized);
     return;
@@ -154,20 +155,35 @@ async function applyRemoteVersion(remoteVersion) {
   await requestLocalCacheRefresh(normalized);
 }
 
-async function checkRemoteVersion() {
+async function checkRemoteVersion({ initial = false } = {}) {
   try {
     const remoteVersion = await fetchRemoteVersion();
+    const localVersion = readLocalVersion();
 
-    // إذا لم يُنشأ الإعداد بعد، نخزن خط أساس محلياً.
-    // عند أول ضغطة من لوحة الإدارة سيتغير من 0 إلى رقم الإصدار الجديد.
+    if (initial && !baselineReady) {
+      baselineReady = true;
+
+      // الجهاز الذي يفتح التطبيق بعد تحديث سابق يحصل على أحدث ملفات أصلًا،
+      // لذلك نعتمد النسخة الحالية كخط أساس دون إعادة تحميل إضافية.
+      if (!localVersion) {
+        writeLocalVersion(remoteVersion || EMPTY_BASELINE_VERSION);
+        return;
+      }
+    }
+
     if (!remoteVersion) {
-      if (!readLocalVersion()) writeLocalVersion("0");
+      if (!localVersion) writeLocalVersion(EMPTY_BASELINE_VERSION);
       return;
     }
 
     await applyRemoteVersion(remoteVersion);
   } catch (error) {
     console.warn("Cache version check failed:", error);
+
+    if (initial && !baselineReady) {
+      baselineReady = true;
+      if (!readLocalVersion()) writeLocalVersion(EMPTY_BASELINE_VERSION);
+    }
   }
 }
 
@@ -179,8 +195,8 @@ export function startCacheVersionWatcher() {
 
   const sb = getSupabase();
 
-  checkRemoteVersion();
-  pollTimer = window.setInterval(checkRemoteVersion, POLL_INTERVAL_MS);
+  checkRemoteVersion({ initial: true });
+  pollTimer = window.setInterval(() => checkRemoteVersion(), POLL_INTERVAL_MS);
 
   const handleOnline = () => checkRemoteVersion();
   const handleVisibility = () => {
@@ -203,7 +219,12 @@ export function startCacheVersionWatcher() {
         },
         payload => {
           const version = payload?.new?.value;
-          if (version !== undefined) applyRemoteVersion(version);
+          if (version === undefined) return;
+
+          // حدث Realtime يعني أن القيمة تغيّرت الآن، حتى إن سبق الفحص الأول.
+          if (!readLocalVersion()) writeLocalVersion(EMPTY_BASELINE_VERSION);
+          baselineReady = true;
+          applyRemoteVersion(version);
         }
       )
       .subscribe();
@@ -213,6 +234,7 @@ export function startCacheVersionWatcher() {
 
   return () => {
     watcherStarted = false;
+    baselineReady = false;
 
     if (pollTimer) {
       window.clearInterval(pollTimer);
