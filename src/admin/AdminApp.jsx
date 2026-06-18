@@ -9,6 +9,7 @@ import AdminListings from "./pages/AdminListings.jsx";
 import AdminReports from "./pages/AdminReports.jsx";
 import AdminBroadcast from "./pages/AdminBroadcast.jsx";
 import AdminSettings from "./pages/AdminSettings.jsx";
+import AdminLinksPage from "./pages/AdminLinksPage.jsx";
 import AdminAds from "./pages/AdminAds.jsx";
 import AdminUserDetail from "./pages/AdminUserDetail.jsx";
 import AdminPushPage from "./pages/AdminPushPage.jsx";
@@ -26,6 +27,7 @@ const ADMIN_COMPONENTS = {
   AdminReports,
   AdminBroadcast,
   AdminSettings,
+  AdminLinksPage,
   AdminAds,
   AdminUserDetail,
   AdminPushPage,
