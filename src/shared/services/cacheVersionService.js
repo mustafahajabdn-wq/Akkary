@@ -157,6 +157,14 @@ async function applyRemoteVersion(remoteVersion) {
 async function checkRemoteVersion() {
   try {
     const remoteVersion = await fetchRemoteVersion();
+
+    // إذا لم يُنشأ الإعداد بعد، نخزن خط أساس محلياً.
+    // عند أول ضغطة من لوحة الإدارة سيتغير من 0 إلى رقم الإصدار الجديد.
+    if (!remoteVersion) {
+      if (!readLocalVersion()) writeLocalVersion("0");
+      return;
+    }
+
     await applyRemoteVersion(remoteVersion);
   } catch (error) {
     console.warn("Cache version check failed:", error);
