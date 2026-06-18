@@ -1,5 +1,5 @@
 import React from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 import AdminGuard from "./AdminGuard.jsx";
 import { adminPageRoutes } from "./adminRoutes.js";
 
@@ -79,27 +79,60 @@ function buildAdminElement(route, props) {
 
 export default function AdminApp(props) {
   const { common } = props;
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const showLinksShortcut =
+    common.user?.role === "admin" &&
+    (location.pathname === "/admin/dashboard" || location.pathname === "/admin");
 
   return (
-    <Routes>
-      <Route index element={<Navigate to="dashboard" replace />} />
-      {adminPageRoutes.map((route) => (
-        <Route
-          key={route.path}
-          path={route.path}
-          element={
-            <AdminGuard
-              user={common.user}
-              refreshUserRoleAccess={common.refreshUserRoleAccess}
-              accessSyncing={common.accessSyncing}
-              authReady={common.authReady}
-              pageName={route.pageName}
-              element={buildAdminElement(route, props)}
-            />
-          }
-        />
-      ))}
-      <Route path="*" element={<Navigate to="dashboard" replace />} />
-    </Routes>
+    <>
+      <Routes>
+        <Route index element={<Navigate to="dashboard" replace />} />
+        {adminPageRoutes.map((route) => (
+          <Route
+            key={route.path}
+            path={route.path}
+            element={
+              <AdminGuard
+                user={common.user}
+                refreshUserRoleAccess={common.refreshUserRoleAccess}
+                accessSyncing={common.accessSyncing}
+                authReady={common.authReady}
+                pageName={route.pageName}
+                element={buildAdminElement(route, props)}
+              />
+            }
+          />
+        ))}
+        <Route path="*" element={<Navigate to="dashboard" replace />} />
+      </Routes>
+
+      {showLinksShortcut && (
+        <button
+          type="button"
+          onClick={() => navigate("/admin/links")}
+          style={{
+            position: "fixed",
+            left: 14,
+            bottom: 18,
+            zIndex: 1200,
+            border: "none",
+            borderRadius: 999,
+            padding: "11px 15px",
+            background: "#334155",
+            color: "#fff",
+            fontFamily: "inherit",
+            fontSize: 12,
+            fontWeight: 900,
+            boxShadow: "0 8px 22px rgba(15,23,42,.24)",
+            cursor: "pointer",
+          }}
+        >
+          🔗 الروابط المهمة
+        </button>
+      )}
+    </>
   );
 }
