@@ -10,6 +10,7 @@ export const adminRoutePaths = {
   adminReports: "/admin/reports",
   adminBroadcast: "/admin/broadcast",
   adminSettings: "/admin/settings",
+  adminLinks: "/admin/links",
   adminAds: "/admin/ads",
   adminUserDetail: "/admin/user-detail",
   adminUserDetailDynamic: "/admin/user",
