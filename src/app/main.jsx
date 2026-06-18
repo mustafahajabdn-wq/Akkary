@@ -6,6 +6,7 @@ import { installGlobalErrorLogger } from "../shared/services/errorLogger.js";
 import { startVisitorPresence } from "../shared/services/visitorPresence.js";
 import { shouldStartVisitorPresence } from "../shared/utils/realtimePolicy.js";
 import { startCacheVersionWatcher } from "../shared/services/cacheVersionService.js";
+import { installAddPageDraftDebounce } from "../shared/utils/addPageDraftDebounce.js";
 
 // ── تجاهل تحذير قفل Supabase (معروف وغير ضار) ──────────────────
 // يحدث عندما يتسابق طلبان على auth token (تبويبين، أو OAuth retry + subscribe)
@@ -21,6 +22,9 @@ if (typeof window !== "undefined") {
     }
   });
 }
+
+// تخفيف حفظ مسودة صفحة إضافة الإعلان: آخر تغيير فقط يُكتب بعد 700ms.
+installAddPageDraftDebounce(700);
 
 // تسجيل أخطاء المستخدمين
 installGlobalErrorLogger();
