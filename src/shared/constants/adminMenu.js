@@ -91,6 +91,12 @@ export function buildAdminProfileMenu(user, counts = {}) {
       show: isFullAdmin && isAdminRole(role)
     },
     {
+      icon: "🔗",
+      label: "الروابط المهمة",
+      action: "adminLinks",
+      show: isFullAdmin && isAdminRole(role)
+    },
+    {
       icon: "⚙️",
       label: "إعدادات التطبيق",
       action: "adminSettings",
