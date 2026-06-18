@@ -7,7 +7,6 @@ import { startVisitorPresence } from "../shared/services/visitorPresence.js";
 import { shouldStartVisitorPresence } from "../shared/utils/realtimePolicy.js";
 import { startCacheVersionWatcher } from "../shared/services/cacheVersionService.js";
 import { installAddPageDraftDebounce } from "../shared/utils/addPageDraftDebounce.js";
-import { installFacebookLoginEnhancer } from "./utils/facebookLoginEnhancer.js";
 
 // ── تجاهل تحذير قفل Supabase (معروف وغير ضار) ──────────────────
 // يحدث عندما يتسابق طلبان على auth token (تبويبين، أو OAuth retry + subscribe)
@@ -27,8 +26,8 @@ if (typeof window !== "undefined") {
 // تخفيف حفظ مسودة صفحة إضافة الإعلان: آخر تغيير فقط يُكتب بعد 700ms.
 installAddPageDraftDebounce(700);
 
-// إظهار زر تسجيل الدخول بواسطة Facebook داخل صفحة الدخول.
-installFacebookLoginEnhancer();
+// تسجيل الدخول بواسطة Facebook جاهز ويعمل، لكنه مخفي مؤقتًا حتى يصبح تطبيق Meta منشورًا للعامة.
+// لإظهاره لاحقًا: أعد استيراد installFacebookLoginEnhancer وشغّل installFacebookLoginEnhancer().
 
 // تسجيل أخطاء المستخدمين
 installGlobalErrorLogger();
