@@ -5,7 +5,7 @@ import { CacheFirst, NetworkFirst } from 'workbox-strategies';
 import { ExpirationPlugin } from 'workbox-expiration';
 import { CacheableResponsePlugin } from 'workbox-cacheable-response';
 
-// تفعيل Service Worker   الجديد فوراً بدون انتظار
+// تفعيل Service Worker الجديد فوراً بدون انتظار
 self.skipWaiting();
 clientsClaim();
 
@@ -32,6 +32,37 @@ function isAppIconOrManifestAsset(url) {
     /^icon-\d+\.png$/i.test(file) ||
     file === "manifest.webmanifest";
 }
+
+// استقبال أوامر التحديث الإجباري من التطبيق.
+self.addEventListener('message', event => {
+  const message = event.data || {};
+
+  if (message.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+    return;
+  }
+
+  if (message.type !== 'FORCE_CACHE_REFRESH') return;
+
+  event.waitUntil(
+    (async () => {
+      const cacheNames = await caches.keys();
+      await Promise.all(cacheNames.map(cacheName => caches.delete(cacheName)));
+
+      const windows = await self.clients.matchAll({
+        type: 'window',
+        includeUncontrolled: true,
+      });
+
+      windows.forEach(client => {
+        client.postMessage({
+          type: 'FORCE_APP_RELOAD',
+          version: message.version || Date.now(),
+        });
+      });
+    })()
+  );
+});
 
 // ── Navigation: NetworkFirst للصفحات — الشبكة أولاً، الكاش عند الفشل ──
 registerRoute(
@@ -87,7 +118,7 @@ registerRoute(
       new CacheableResponsePlugin({ statuses: [0, 200] }),
       new ExpirationPlugin({
         maxEntries: 30,
-        maxAgeSeconds: 2 * 24 * 60 * 60, // 2 أيام
+        maxAgeSeconds: 2 * 24 * 60 * 60, // يومان
         purgeOnQuotaError: true,
       }),
     ],
@@ -95,36 +126,48 @@ registerRoute(
 );
 
 // ── Push Notifications ──────────────────────────────────────────
-self.addEventListener('push', (event) => {
+self.addEventListener('push', event => {
   let data = { title: 'طابو أخضر', body: '', icon: '/icons/icon-192.png', url: '/' };
+
   if (event.data) {
-    try { data = { ...data, ...event.data.json() }; }
-    catch { data.body = event.data.text() || ''; }
+    try {
+      data = { ...data, ...event.data.json() };
+    } catch {
+      data.body = event.data.text() || '';
+    }
   }
+
   event.waitUntil(
     self.registration.showNotification(data.title, {
-      body:    data.body,
-      icon:    data.icon || '/icons/icon-192.png',
-      badge:   '/icons/icon-192.png',
-      data:    { url: data.url || '/' },
-      dir:     'rtl',
-      lang:    'ar',
+      body: data.body,
+      icon: data.icon || '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      data: { url: data.url || '/' },
+      dir: 'rtl',
+      lang: 'ar',
       vibrate: [200, 100, 200],
-      tag:     'tabu-push',
+      tag: 'tabu-push',
       renotify: true,
     })
   );
 });
 
-self.addEventListener('notificationclick', (event) => {
+self.addEventListener('notificationclick', event => {
   event.notification.close();
   navigator.clearAppBadge && navigator.clearAppBadge().catch(() => {});
+
   const url = event.notification.data?.url || '/';
+
   event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((cs) => {
-      const c = cs.find(c => c.url.includes(self.location.origin));
-      if (c) { c.focus(); c.navigate(url); }
-      else clients.openWindow(url);
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windows => {
+      const client = windows.find(item => item.url.includes(self.location.origin));
+
+      if (client) {
+        client.focus();
+        client.navigate(url);
+      } else {
+        self.clients.openWindow(url);
+      }
     })
   );
 });
