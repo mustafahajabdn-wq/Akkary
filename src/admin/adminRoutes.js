@@ -7,6 +7,7 @@ export const adminPageRoutes = [
   { path: "reports", pageName: "adminReports", component: "AdminReports" },
   { path: "broadcast", pageName: "adminBroadcast", component: "AdminBroadcast" },
   { path: "settings", pageName: "adminSettings", component: "AdminSettings" },
+  { path: "links", pageName: "adminLinks", component: "AdminLinksPage" },
   { path: "ads", pageName: "adminAds", component: "AdminAds" },
   { path: "user/:userId", pageName: "adminUserDetail", component: "AdminUserDetailDynamic" },
   { path: "user-detail", pageName: "adminUserDetail", component: "AdminUserDetail" },
