@@ -82,9 +82,10 @@ export default function AdminApp(props) {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const showLinksShortcut =
-    common.user?.role === "admin" &&
-    (location.pathname === "/admin/dashboard" || location.pathname === "/admin");
+  const isFullAdmin = common.user?.role === "admin" || common.user?.isAdmin === true;
+  const isInsideAdmin = location.pathname === "/admin" || location.pathname.startsWith("/admin/");
+  const isLinksPage = location.pathname === "/admin/links" || location.pathname === "/admin/links/";
+  const showLinksShortcut = isFullAdmin && isInsideAdmin && !isLinksPage;
 
   return (
     <>
@@ -113,20 +114,21 @@ export default function AdminApp(props) {
         <button
           type="button"
           onClick={() => navigate("/admin/links")}
+          aria-label="فتح الروابط المهمة"
           style={{
             position: "fixed",
             left: 14,
-            bottom: 18,
-            zIndex: 1200,
+            bottom: "calc(78px + env(safe-area-inset-bottom, 0px))",
+            zIndex: 9999,
             border: "none",
             borderRadius: 999,
-            padding: "11px 15px",
+            padding: "12px 16px",
             background: "#334155",
             color: "#fff",
             fontFamily: "inherit",
             fontSize: 12,
             fontWeight: 900,
-            boxShadow: "0 8px 22px rgba(15,23,42,.24)",
+            boxShadow: "0 10px 26px rgba(15,23,42,.32)",
             cursor: "pointer",
           }}
         >
