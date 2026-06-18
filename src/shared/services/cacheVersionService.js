@@ -1,4 +1,5 @@
 import { getSupabase } from "./supabaseClient.js";
+import { clearAllRuntimeCache } from "../utils/cache.js";
 
 export const FORCE_CACHE_VERSION_KEY = "force_cache_version";
 
@@ -68,6 +69,16 @@ async function clearBrowserCachesDirectly() {
   await Promise.all(names.map(name => caches.delete(name)));
 }
 
+async function clearApplicationDataCaches() {
+  try {
+    // يمسح فقط كاش القوائم والتفاصيل والصور الخاص بالتطبيق.
+    // لا يمسح جلسة الدخول أو مسودات إضافة الإعلانات.
+    await clearAllRuntimeCache();
+  } catch (error) {
+    console.warn("Application data cache clear failed:", error);
+  }
+}
+
 function installServiceWorkerMessageListener() {
   if (
     messageListenerInstalled ||
@@ -96,6 +107,9 @@ export async function requestLocalCacheRefresh(version = Date.now()) {
   writeLocalVersion(normalized);
 
   try {
+    // Cache Storage وحده لا يكفي: تفاصيل الإعلانات والقوائم محفوظة أيضاً في localStorage.
+    await clearApplicationDataCaches();
+
     if ("serviceWorker" in navigator) {
       const registration = await navigator.serviceWorker.getRegistration();
 
