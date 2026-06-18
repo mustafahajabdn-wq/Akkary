@@ -5,8 +5,9 @@ import App from "./App.jsx";
 import { installGlobalErrorLogger } from "../shared/services/errorLogger.js";
 import { startVisitorPresence } from "../shared/services/visitorPresence.js";
 import { shouldStartVisitorPresence } from "../shared/utils/realtimePolicy.js";
+import { startCacheVersionWatcher } from "../shared/services/cacheVersionService.js";
 
-// ── تجاهل   تحذير قفل Supabase (معروف وغير ضار) ──────────────────
+// ── تجاهل تحذير قفل Supabase (معروف وغير ضار) ──────────────────
 // يحدث عندما يتسابق طلبان على auth token (تبويبين، أو OAuth retry + subscribe)
 if (typeof window !== "undefined") {
   window.addEventListener("unhandledrejection", event => {
@@ -46,6 +47,10 @@ const updateSW = registerSW({
     console.error("SW registration failed:", error);
   }
 });
+
+// مراقبة رقم إصدار الكاش من app_settings.
+// عند تغييره من لوحة الإدارة يُمسح Cache Storage وتُعاد الصفحة بأحدث نسخة.
+startCacheVersionWatcher();
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
