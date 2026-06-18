@@ -1,5 +1,5 @@
 import React from "react";
-import { Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import AdminGuard from "./AdminGuard.jsx";
 import { adminPageRoutes } from "./adminRoutes.js";
 
@@ -79,62 +79,27 @@ function buildAdminElement(route, props) {
 
 export default function AdminApp(props) {
   const { common } = props;
-  const location = useLocation();
-  const navigate = useNavigate();
-
-  const isFullAdmin = common.user?.role === "admin" || common.user?.isAdmin === true;
-  const isInsideAdmin = location.pathname === "/admin" || location.pathname.startsWith("/admin/");
-  const isLinksPage = location.pathname === "/admin/links" || location.pathname === "/admin/links/";
-  const showLinksShortcut = isFullAdmin && isInsideAdmin && !isLinksPage;
 
   return (
-    <>
-      <Routes>
-        <Route index element={<Navigate to="dashboard" replace />} />
-        {adminPageRoutes.map((route) => (
-          <Route
-            key={route.path}
-            path={route.path}
-            element={
-              <AdminGuard
-                user={common.user}
-                refreshUserRoleAccess={common.refreshUserRoleAccess}
-                accessSyncing={common.accessSyncing}
-                authReady={common.authReady}
-                pageName={route.pageName}
-                element={buildAdminElement(route, props)}
-              />
-            }
-          />
-        ))}
-        <Route path="*" element={<Navigate to="dashboard" replace />} />
-      </Routes>
-
-      {showLinksShortcut && (
-        <button
-          type="button"
-          onClick={() => navigate("/admin/links")}
-          aria-label="فتح الروابط المهمة"
-          style={{
-            position: "fixed",
-            left: 14,
-            bottom: "calc(78px + env(safe-area-inset-bottom, 0px))",
-            zIndex: 9999,
-            border: "none",
-            borderRadius: 999,
-            padding: "12px 16px",
-            background: "#334155",
-            color: "#fff",
-            fontFamily: "inherit",
-            fontSize: 12,
-            fontWeight: 900,
-            boxShadow: "0 10px 26px rgba(15,23,42,.32)",
-            cursor: "pointer",
-          }}
-        >
-          🔗 الروابط المهمة
-        </button>
-      )}
-    </>
+    <Routes>
+      <Route index element={<Navigate to="dashboard" replace />} />
+      {adminPageRoutes.map((route) => (
+        <Route
+          key={route.path}
+          path={route.path}
+          element={
+            <AdminGuard
+              user={common.user}
+              refreshUserRoleAccess={common.refreshUserRoleAccess}
+              accessSyncing={common.accessSyncing}
+              authReady={common.authReady}
+              pageName={route.pageName}
+              element={buildAdminElement(route, props)}
+            />
+          }
+        />
+      ))}
+      <Route path="*" element={<Navigate to="dashboard" replace />} />
+    </Routes>
   );
 }
