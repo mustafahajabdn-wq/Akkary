@@ -47,7 +47,14 @@ self.addEventListener('message', event => {
   event.waitUntil(
     (async () => {
       const cacheNames = await caches.keys();
-      await Promise.all(cacheNames.map(cacheName => caches.delete(cacheName)));
+
+      // لا نحذف Workbox precache حتى يبقى التطبيق قابلاً للفتح دون إنترنت.
+      // عند نشر إصدار جديد ينظف Workbox النسخ القديمة تلقائياً أثناء التفعيل.
+      const runtimeCaches = cacheNames.filter(
+        cacheName => !cacheName.startsWith('workbox-precache')
+      );
+
+      await Promise.all(runtimeCaches.map(cacheName => caches.delete(cacheName)));
 
       const windows = await self.clients.matchAll({
         type: 'window',
