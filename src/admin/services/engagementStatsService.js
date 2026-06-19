@@ -1,5 +1,7 @@
 import { adminCount, adminGet } from "./adminApi.js";
 
+const PAGE_SIZE = 1000;
+
 function asArray(value) {
   return Array.isArray(value) ? value : [];
 }
@@ -36,10 +38,26 @@ async function safeGet(path) {
   }
 }
 
+async function safeGetAll(basePath) {
+  const allRows = [];
+
+  for (let offset = 0; ; offset += PAGE_SIZE) {
+    const separator = basePath.includes("?") ? "&" : "?";
+    const page = asArray(
+      await safeGet(`${basePath}${separator}limit=${PAGE_SIZE}&offset=${offset}`)
+    );
+
+    allRows.push(...page);
+    if (page.length < PAGE_SIZE) break;
+  }
+
+  return allRows;
+}
+
 export async function getAdminEngagementStats() {
   const [listingRows, favorites, conversations] = await Promise.all([
-    safeGet(
-      "/rest/v1/listings?select=views,phone_clicks,whatsapp_clicks&limit=10000"
+    safeGetAll(
+      "/rest/v1/listings?select=views,phone_clicks,whatsapp_clicks&order=id.asc"
     ),
     safeCount("/rest/v1/favorites?select=listing_id"),
     safeCount("/rest/v1/conversations?listing_id=not.is.null&select=listing_id"),
@@ -68,18 +86,22 @@ export async function getAdminEngagementStats() {
 
 export async function enrichAdminListingsEngagement(listings = []) {
   const rows = asArray(listings);
-  const ids = [...new Set(rows.map(item => String(item?.id ?? "").trim()).filter(Boolean))];
+  const ids = [
+    ...new Set(
+      rows.map(item => String(item?.id ?? "").trim()).filter(Boolean)
+    ),
+  ];
 
   if (!ids.length) return rows;
 
   const inFilter = ids.map(encodeURIComponent).join(",");
 
   const [favoriteRows, conversationRows] = await Promise.all([
-    safeGet(
-      `/rest/v1/favorites?listing_id=in.(${inFilter})&select=listing_id&limit=10000`
+    safeGetAll(
+      `/rest/v1/favorites?listing_id=in.(${inFilter})&select=listing_id&order=listing_id.asc`
     ),
-    safeGet(
-      `/rest/v1/conversations?listing_id=in.(${inFilter})&select=listing_id&limit=10000`
+    safeGetAll(
+      `/rest/v1/conversations?listing_id=in.(${inFilter})&select=listing_id&order=listing_id.asc`
     ),
   ]);
 
