@@ -1,8 +1,14 @@
+import { installListingWhatsAppMessage } from "../../app/utils/listingWhatsAppMessage.js";
+
 const DRAFT_KEY_PREFIX = "addpage_draft:";
 const INSTALL_FLAG = "__aqariAddPageDraftDebounceInstalled";
 
 export function installAddPageDraftDebounce(delayMs = 700) {
   if (typeof window === "undefined" || typeof Storage === "undefined") return;
+
+  // يُحمّل مع نقطة تشغيل التطبيق نفسها، ويعمل فقط داخل صفحات الإعلانات.
+  installListingWhatsAppMessage();
+
   if (window[INSTALL_FLAG]) return;
 
   window[INSTALL_FLAG] = true;
