@@ -16,6 +16,7 @@ import AdminPushPage from "./pages/AdminPushPage.jsx";
 import AdminRolesPage from "./pages/AdminRolesPage.jsx";
 import AdminPropertyFields from "./pages/AdminPropertyFields.jsx";
 import AdminUserDetailDynamic from "./components/AdminUserDetailDynamic.jsx";
+import AdminEngagementOverview from "./components/AdminEngagementOverview.jsx";
 import AdminSQLPage from "./pages/AdminSQLPage.jsx";
 import ImporterPage from "./pages/ImporterPage.jsx";
 import PendingPage from "./pages/PendingPage.jsx";
@@ -72,6 +73,15 @@ function buildAdminElement(route, props) {
       setDetailPrevPage,
       onApprove: () => reloadListingsRef.current(),
     });
+  }
+
+  if (route.component === "AdminDashboard") {
+    return (
+      <>
+        <Component {...pageProps} />
+        <AdminEngagementOverview DC={pageProps.DC} />
+      </>
+    );
   }
 
   return <Component {...pageProps} />;
