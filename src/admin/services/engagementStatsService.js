@@ -1,6 +1,7 @@
-import { adminCount, adminGet } from "./adminApi.js";
+import { adminGet } from "./adminApi.js";
 
 const PAGE_SIZE = 1000;
+const ID_CHUNK_SIZE = 100;
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
@@ -20,13 +21,30 @@ function countByListingId(rows) {
   }, {});
 }
 
-async function safeCount(path) {
-  try {
-    return await adminCount(path);
-  } catch (error) {
-    console.warn("[engagementStats] count skipped", path, error);
-    return 0;
+function uniqueSorted(values) {
+  return [...new Set(values.map(value => String(value || "").trim()).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, "ar"));
+}
+
+function getPeriodStart(period) {
+  const now = new Date();
+
+  if (period === "today") {
+    now.setHours(0, 0, 0, 0);
+    return now.toISOString();
   }
+
+  if (period === "week") {
+    now.setDate(now.getDate() - 7);
+    return now.toISOString();
+  }
+
+  if (period === "month") {
+    now.setDate(now.getDate() - 30);
+    return now.toISOString();
+  }
+
+  return "";
 }
 
 async function safeGet(path) {
@@ -54,16 +72,66 @@ async function safeGetAll(basePath) {
   return allRows;
 }
 
-export async function getAdminEngagementStats() {
-  const [listingRows, favorites, conversations] = await Promise.all([
-    safeGetAll(
-      "/rest/v1/listings?select=views,phone_clicks,whatsapp_clicks&order=id.asc"
-    ),
-    safeCount("/rest/v1/favorites?select=listing_id"),
-    safeCount("/rest/v1/conversations?listing_id=not.is.null&select=listing_id"),
-  ]);
+async function fetchRowsForListingIds(table, ids) {
+  const rows = [];
 
-  const totals = asArray(listingRows).reduce(
+  for (let index = 0; index < ids.length; index += ID_CHUNK_SIZE) {
+    const chunk = ids.slice(index, index + ID_CHUNK_SIZE);
+    const inFilter = chunk.map(encodeURIComponent).join(",");
+
+    rows.push(
+      ...(await safeGetAll(
+        `/rest/v1/${table}?listing_id=in.(${inFilter})&select=listing_id&order=listing_id.asc`
+      ))
+    );
+  }
+
+  return rows;
+}
+
+function buildListingsStatsPath(filters = {}) {
+  const params = new URLSearchParams();
+  params.set(
+    "select",
+    "id,views,phone_clicks,whatsapp_clicks,created_at,city,type,category"
+  );
+  params.set("order", "id.asc");
+
+  const periodStart = getPeriodStart(filters.period);
+  if (periodStart) params.set("created_at", `gte.${periodStart}`);
+  if (filters.city) params.set("city", `eq.${filters.city}`);
+  if (filters.type) params.set("type", `eq.${filters.type}`);
+  if (filters.category) params.set("category", `eq.${filters.category}`);
+
+  return `/rest/v1/listings?${params.toString()}`;
+}
+
+export async function getAdminEngagementFilterOptions() {
+  const rows = await safeGetAll(
+    "/rest/v1/listings?select=city,type,category&order=id.asc"
+  );
+
+  return {
+    cities: uniqueSorted(rows.map(row => row?.city)),
+    types: uniqueSorted(rows.map(row => row?.type)),
+    categories: uniqueSorted(rows.map(row => row?.category)),
+  };
+}
+
+export async function getAdminEngagementStats(filters = {}) {
+  const listingRows = await safeGetAll(buildListingsStatsPath(filters));
+  const ids = listingRows
+    .map(listing => String(listing?.id ?? "").trim())
+    .filter(Boolean);
+
+  const [favoriteRows, conversationRows] = ids.length
+    ? await Promise.all([
+        fetchRowsForListingIds("favorites", ids),
+        fetchRowsForListingIds("conversations", ids),
+      ])
+    : [[], []];
+
+  const totals = listingRows.reduce(
     (result, listing) => {
       result.views += safeNumber(listing?.views);
       result.phoneClicks += safeNumber(listing?.phone_clicks);
@@ -79,8 +147,9 @@ export async function getAdminEngagementStats() {
 
   return {
     ...totals,
-    favorites: safeNumber(favorites),
-    conversations: safeNumber(conversations),
+    favorites: favoriteRows.length,
+    conversations: conversationRows.length,
+    listings: listingRows.length,
   };
 }
 
@@ -94,15 +163,9 @@ export async function enrichAdminListingsEngagement(listings = []) {
 
   if (!ids.length) return rows;
 
-  const inFilter = ids.map(encodeURIComponent).join(",");
-
   const [favoriteRows, conversationRows] = await Promise.all([
-    safeGetAll(
-      `/rest/v1/favorites?listing_id=in.(${inFilter})&select=listing_id&order=listing_id.asc`
-    ),
-    safeGetAll(
-      `/rest/v1/conversations?listing_id=in.(${inFilter})&select=listing_id&order=listing_id.asc`
-    ),
+    fetchRowsForListingIds("favorites", ids),
+    fetchRowsForListingIds("conversations", ids),
   ]);
 
   const favoritesMap = countByListingId(favoriteRows);
