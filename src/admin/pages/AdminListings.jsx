@@ -1,5 +1,5 @@
 import { Navigate } from "react-router-dom";
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { C } from "../../shared/constants/colors.js";
 import { IslamicPattern, Wave } from "../../shared/components/icons.jsx";
 import { ListingCard } from "../../shared/components/common/ListingCard.jsx";
@@ -15,11 +15,13 @@ import {
 import { enrichAdminListingsEngagement } from "../services/engagementStatsService.js";
 import { S } from "../../shared/styles/primitives.js";
 
+const PAGE_STEP = 20;
+
 function timeAgo(date) {
-  const d = Math.floor((Date.now() - new Date(date)) / 60000);
-  if (d < 60) return `${d} د`;
-  if (d < 1440) return `${Math.floor(d / 60)} س`;
-  return `${Math.floor(d / 1440)} يوم`;
+  const minutes = Math.floor((Date.now() - new Date(date)) / 60000);
+  if (minutes < 60) return `${minutes} د`;
+  if (minutes < 1440) return `${Math.floor(minutes / 60)} س`;
+  return `${Math.floor(minutes / 1440)} يوم`;
 }
 
 function cleanListingSearch(value) {
@@ -32,7 +34,7 @@ function extractListingIdSearch(value) {
 }
 
 function formatNumber(value) {
-  return Number(value || 0).toLocaleString("ar-SY");
+  return Number(value || 0).toLocaleString("en-US");
 }
 
 function ListingEngagementStrip({ item, DC }) {
@@ -66,11 +68,15 @@ function ListingEngagementStrip({ item, DC }) {
           style={{
             minWidth: 0,
             textAlign: "center",
-            borderLeft: metric.key === "conversations_count" ? "none" : `1px solid ${DC?.border || "#E5E7EB"}`,
+            borderLeft:
+              metric.key === "conversations_count"
+                ? "none"
+                : `1px solid ${DC?.border || "#E5E7EB"}`,
           }}
         >
           <div style={{ fontSize: 11, lineHeight: 1 }}>{metric.icon}</div>
           <div
+            dir="ltr"
             style={{
               fontSize: 13,
               lineHeight: 1.2,
@@ -79,6 +85,7 @@ function ListingEngagementStrip({ item, DC }) {
               marginTop: 3,
               overflow: "hidden",
               textOverflow: "ellipsis",
+              fontVariantNumeric: "tabular-nums",
             }}
           >
             {formatNumber(item?.[metric.key])}
@@ -110,51 +117,6 @@ export default function AdminListings({
   setDetailPrevPage,
   openDetail,
 }) {
-  const sx = {
-    s1: DC => ({
-      position: "sticky",
-      top: 0,
-      zIndex: 10,
-      background: DC?.white || "#fff",
-      boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-    }),
-    s2: DC => ({
-      display: "flex",
-      borderBottom: `2px solid ${DC?.border || "#E5E7EB"}`,
-    }),
-    s3: {
-      padding: "8px 10px",
-      display: "flex",
-      gap: 6,
-      alignItems: "center",
-    },
-    s4: DC => ({
-      flex: 1,
-      minWidth: 0,
-      padding: "5px 10px",
-      borderRadius: 20,
-      border: `1.5px solid ${DC?.border || "#DDE8E1"}`,
-      fontSize: 12,
-      fontFamily: "inherit",
-      background: DC?.bg || "#F2F5F3",
-      color: DC?.text || "#1A2E20",
-      outline: "none",
-    }),
-    s5: {
-      padding: "10px 14px",
-      paddingBottom: 80,
-    },
-    s6: {
-      fontSize: 40,
-      marginBottom: 12,
-    },
-    s7: DC => ({
-      fontSize: 14,
-      fontWeight: 800,
-      color: DC?.text,
-    }),
-  };
-
   if (
     user?.role !== "admin" &&
     !(user?.allowedPages || []).includes("adminListings")
@@ -163,7 +125,7 @@ export default function AdminListings({
   }
 
   const [listings, setListings] = useState([]);
-  const [visibleCount] = useState(20);
+  const [visibleCount, setVisibleCount] = useState(PAGE_STEP);
   const [loading, setLoading] = useState(true);
   const initialSearch = cleanListingSearch(
     new URLSearchParams(window.location.search).get("q") || ""
@@ -178,15 +140,17 @@ export default function AdminListings({
   }, [statusFilter, timeFilter, listingIdSearch]);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
+    setVisibleCount(PAGE_STEP);
+  }, [statusFilter, timeFilter, search]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
     if (search) params.set("q", search);
     else params.delete("q");
 
     const next =
       window.location.pathname +
       (params.toString() ? `?${params.toString()}` : "");
-
     window.history.replaceState(null, "", next);
   }, [search]);
 
@@ -199,10 +163,9 @@ export default function AdminListings({
         timeFilter,
         listingId: listingIdSearch,
       });
-
       setListings(await enrichAdminListingsEngagement(data));
-    } catch (err) {
-      console.error("Failed to load admin listings:", err);
+    } catch (error) {
+      console.error("Failed to load admin listings:", error);
       setListings([]);
     } finally {
       setLoading(false);
@@ -212,9 +175,7 @@ export default function AdminListings({
   async function toggleHide(listing) {
     const status = await toggleAdminListingHidden(listing);
     setListings(current =>
-      current.map(item =>
-        item.id === listing.id ? { ...item, status } : item
-      )
+      current.map(item => (item.id === listing.id ? { ...item, status } : item))
     );
   }
 
@@ -254,11 +215,12 @@ export default function AdminListings({
   function openListing(listing) {
     if (openDetail) {
       openDetail(listing);
-      setDetailPrevPage && setDetailPrevPage("adminListings");
-    } else {
-      setDetail && setDetail(listing);
-      setPage("detail");
+      setDetailPrevPage?.("adminListings");
+      return;
     }
+
+    setDetail?.(listing);
+    setPage("detail");
   }
 
   const cleanSearch = search
@@ -285,6 +247,45 @@ export default function AdminListings({
     return haystack.some(value => value.includes(needle));
   });
 
+  const shownListings = filtered.slice(0, visibleCount);
+  const hasMore = visibleCount < filtered.length;
+
+  const styles = {
+    sticky: {
+      position: "sticky",
+      top: 0,
+      zIndex: 10,
+      background: DC?.white || "#fff",
+      boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+    },
+    tabs: {
+      display: "flex",
+      borderBottom: `2px solid ${DC?.border || "#E5E7EB"}`,
+    },
+    filterRow: {
+      padding: "8px 10px",
+      display: "flex",
+      gap: 6,
+      alignItems: "center",
+    },
+    search: {
+      flex: 1,
+      minWidth: 0,
+      padding: "5px 10px",
+      borderRadius: 20,
+      border: `1.5px solid ${DC?.border || "#DDE8E1"}`,
+      fontSize: 12,
+      fontFamily: "inherit",
+      background: DC?.bg || "#F2F5F3",
+      color: DC?.text || "#1A2E20",
+      outline: "none",
+    },
+    list: {
+      padding: "10px 14px",
+      paddingBottom: 80,
+    },
+  };
+
   return (
     <div style={S.pageShell(DC)}>
       <div style={S.primaryHero(C.primary)}>
@@ -294,13 +295,13 @@ export default function AdminListings({
         </div>
         <div style={S.relZ1}>
           <div style={S.title20White}>🏠 كل الإعلانات</div>
-          <div style={S.whiteMeta12}>{filtered.length} إعلان</div>
+          <div style={S.whiteMeta12}>{formatNumber(filtered.length)} إعلان</div>
         </div>
         <Wave />
       </div>
 
-      <div style={sx.s1(DC)}>
-        <div style={sx.s2(DC)}>
+      <div style={styles.sticky}>
+        <div style={styles.tabs}>
           {[
             ["all", "📋", "الكل", "#334155", "#F1F5F9"],
             ["active", "🟢", "نشط", C.primary, "#E8F4F0"],
@@ -315,6 +316,7 @@ export default function AdminListings({
             return (
               <button
                 key={value}
+                type="button"
                 onClick={() => setStatusFilter(value)}
                 style={{
                   flex: 1,
@@ -349,7 +351,7 @@ export default function AdminListings({
           })}
         </div>
 
-        <div style={sx.s3}>
+        <div style={styles.filterRow}>
           {[
             ["all", "الكل"],
             ["today", "اليوم"],
@@ -361,6 +363,7 @@ export default function AdminListings({
             return (
               <button
                 key={value}
+                type="button"
                 onClick={() => setTimeFilter(value)}
                 style={{
                   padding: "5px 10px",
@@ -387,58 +390,84 @@ export default function AdminListings({
             value={search}
             onChange={event => setSearch(event.target.value)}
             placeholder="بحث بالعنوان، المدينة، صاحب الإعلان أو رقم الإعلان..."
-            style={sx.s4(DC)}
+            style={styles.search}
           />
         </div>
       </div>
 
-      <div style={sx.s5}>
+      <div style={styles.list}>
         {loading ? (
           <div style={S.emptyStateCentered}>⏳</div>
         ) : filtered.length === 0 ? (
           <div style={S.emptyStateCentered}>
-            <div style={sx.s6}>🏠</div>
-            <div style={sx.s7(DC)}>لا توجد إعلانات</div>
+            <div style={{ fontSize: 40, marginBottom: 12 }}>🏠</div>
+            <div style={{ fontSize: 14, fontWeight: 800, color: DC?.text }}>
+              لا توجد إعلانات
+            </div>
           </div>
         ) : (
-          filtered.slice(0, visibleCount).map(listing => {
-            const cardItem = {
-              ...listing,
-              title: listing.title || listing.category || "—",
-              photo:
-                listing.listing_images?.find(image => image.is_main)?.url ||
-                listing.listing_images?.[0]?.url ||
-                null,
-              images: (listing.listing_images || []).map(image => image.url),
-              seller: listing.profiles?.name || "—",
-              sellerInit: (listing.profiles?.name || "م")[0],
-              accountType: "individual",
-              daysOld: Math.floor(
-                (Date.now() - new Date(listing.created_at)) / 86400000
-              ),
-              time: "منذ " + timeAgo(listing.created_at),
-            };
+          <>
+            {shownListings.map(listing => {
+              const cardItem = {
+                ...listing,
+                title: listing.title || listing.category || "—",
+                photo:
+                  listing.listing_images?.find(image => image.is_main)?.url ||
+                  listing.listing_images?.[0]?.url ||
+                  null,
+                images: (listing.listing_images || []).map(image => image.url),
+                seller: listing.profiles?.name || "—",
+                sellerInit: (listing.profiles?.name || "م")[0],
+                accountType: "individual",
+                daysOld: Math.floor(
+                  (Date.now() - new Date(listing.created_at)) / 86400000
+                ),
+                time: "منذ " + timeAgo(listing.created_at),
+              };
 
-            return (
-              <div key={listing.id} style={{ marginBottom: 14 }}>
-                <ListingCard
-                  DC={DC}
-                  mode="admin"
-                  item={cardItem}
-                  onPress={() => openListing(listing)}
-                  onHide={() => toggleHide(listing)}
-                  onUnflag={() => unflagListing(listing)}
-                  onDelete={() => deleteListing(listing.id)}
-                  onApprove={() => approveListing(listing.id)}
-                  onReject={() => rejectListing(listing.id)}
-                  onEdit={() =>
-                    window.open(`/admin/edit-listing/${listing.id}`, "_blank")
-                  }
-                />
-                <ListingEngagementStrip item={listing} DC={DC} />
-              </div>
-            );
-          })
+              return (
+                <div key={listing.id} style={{ marginBottom: 14 }}>
+                  <ListingCard
+                    DC={DC}
+                    mode="admin"
+                    item={cardItem}
+                    onPress={() => openListing(listing)}
+                    onHide={() => toggleHide(listing)}
+                    onUnflag={() => unflagListing(listing)}
+                    onDelete={() => deleteListing(listing.id)}
+                    onApprove={() => approveListing(listing.id)}
+                    onReject={() => rejectListing(listing.id)}
+                    onEdit={() =>
+                      window.open(`/admin/edit-listing/${listing.id}`, "_blank")
+                    }
+                  />
+                  <ListingEngagementStrip item={listing} DC={DC} />
+                </div>
+              );
+            })}
+
+            {hasMore ? (
+              <button
+                type="button"
+                onClick={() => setVisibleCount(count => count + PAGE_STEP)}
+                style={{
+                  width: "100%",
+                  border: `1.5px solid ${C.primary}`,
+                  background: DC?.white || "#fff",
+                  color: C.primary,
+                  borderRadius: 14,
+                  padding: "12px 16px",
+                  fontFamily: "inherit",
+                  fontSize: 13,
+                  fontWeight: 900,
+                  cursor: "pointer",
+                  boxShadow: "0 4px 12px rgba(26, 74, 46, 0.08)",
+                }}
+              >
+                تحميل المزيد · عرض {formatNumber(shownListings.length)} من {formatNumber(filtered.length)}
+              </button>
+            ) : null}
+          </>
         )}
       </div>
     </div>
