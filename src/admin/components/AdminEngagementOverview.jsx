@@ -6,6 +6,8 @@ import {
   getAdminEngagementStats,
 } from "../services/engagementStatsService.js";
 
+const UI_VERSION = "2";
+
 const METRICS = [
   { key: "views", icon: "👁", label: "المشاهدات", color: "#0F766E", bg: "#ECFDF5" },
   { key: "phoneClicks", icon: "📞", label: "فتح الهاتف", color: "#1D4ED8", bg: "#EFF6FF" },
@@ -142,6 +144,7 @@ export default function AdminEngagementOverview({ DC }) {
 
   const content = (
     <section
+      data-engagement-ui-version={UI_VERSION}
       style={{
         background: DC?.white || "#fff",
         border: `1px solid ${DC?.border || "#DDE8E1"}`,
@@ -163,6 +166,16 @@ export default function AdminEngagementOverview({ DC }) {
         <div>
           <div style={{ fontSize: 13, fontWeight: 900, color: DC?.text || "#1A2E20" }}>
             📊 تفاعل الإعلانات
+            <span
+              style={{
+                marginRight: 6,
+                fontSize: 8,
+                color: "#94A3B8",
+                fontWeight: 700,
+              }}
+            >
+              v{UI_VERSION}
+            </span>
           </div>
           <div style={{ fontSize: 10, color: DC?.text3 || "#64748B", marginTop: 3 }}>
             أرقام تراكمية ضمن {formatNumber(stats?.listings)} إعلان مطابق للفلتر
