@@ -29,13 +29,23 @@ function toAbsoluteUrl(value = "") {
   if (/^https?:\/\//i.test(text)) return text;
   if (text.startsWith("//")) return `https:${text}`;
   if (text.startsWith("/")) return `${SITE_URL}${text}`;
-  return `${SITE_URL}/${text.replace(/^\.?\//, "")}`;
+  return "";
 }
 
 function isValidShareImageUrl(value = "") {
   try {
     const url = new URL(String(value ?? "").trim());
-    return url.protocol === "https:" && Boolean(url.hostname);
+    if (url.protocol !== "https:" || !url.hostname) return false;
+
+    const pathname = url.pathname.toLowerCase();
+    if (/(?:^|\/)(?:og-default|placeholder|no-image|default-image)(?:[._-]|\/|$)/i.test(pathname)) {
+      return false;
+    }
+
+    return (
+      /\.(?:png|jpe?g|webp|gif|avif|svg)$/i.test(pathname) ||
+      pathname.includes("/storage/v1/object/")
+    );
   } catch {
     return false;
   }
