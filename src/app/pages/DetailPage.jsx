@@ -996,7 +996,7 @@ function DetailPage({
           <div style={DS.descWrap}>
             <div style={DS.descCard(DC)}>
               <div style={DS.descHeader}>
-                <div style={DS.descTitle(DC)}>{item?.title}</div>
+                <h1 style={{ ...DS.descTitle(DC), margin: 0 }}>{item?.title}</h1>
 
                 <button
                   type="button"
