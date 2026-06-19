@@ -7,6 +7,7 @@ import { S } from "../../styles/primitives.js";
 import { CC } from "../../styles/componentStyles.js";
 import { LazyImage } from "./LazyImage.jsx";
 import { CurrencyTag, OwnershipTag, OfficeBadge } from "./Badges.jsx";
+
 function CardMedia({
   item,
   isWant,
@@ -104,6 +105,7 @@ function CardMedia({
       zIndex: 5
     })
   };
+
   return <div style={sx.s1(isWant, DC)}>
       {hasVideo ? <video src={item.video_url} preload="metadata" muted playsInline style={sx.s2} /> : hasPhoto ? <LazyImage src={photoSrc} alt="" style={sx.s3} /> : <div style={sx.s4}>
           <IslamicPattern opacity={0.1} color={C.primary} width={100} height={100} />
@@ -127,6 +129,7 @@ function CardMedia({
       </div>
     </div>;
 }
+
 function ListingCard({
   item,
   onPress,
@@ -164,7 +167,9 @@ function ListingCard({
       marginTop: 2
     }
   };
+
   if (!DC) DC = C;
+
   const isFaved = favs?.includes(Number(item.id)) || favs?.includes(String(item.id));
   const isWant = item.type === "want_buy" || item.type === "want_rent";
   const categoryKey = String(item.category || "").trim();
@@ -196,6 +201,24 @@ function ListingCard({
   const sellerInit = item.sellerInit || sellerName[0] || "م";
   const isNew = (item.daysOld || 0) <= 3;
   const roomsSalonsLine = [roomCount ? roomCount === 1 ? "غرفة" : roomCount === 2 ? "غرفتان" : `${roomCount} غرف` : null, salonsValue ? salonsValue === 1 ? "صالون" : salonsValue === 2 ? "صالونان" : `${salonsValue} صالونات` : null].filter(Boolean).join(" و");
+  const listingHref = `/listing/${item.id}`;
+
+  function handleListingLinkClick(event) {
+    event.stopPropagation();
+
+    const modifiedClick =
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey;
+
+    if (!onPress || modifiedClick) return;
+
+    event.preventDefault();
+    onPress(item);
+  }
+
   return <div onClick={() => onPress && onPress(item)} onMouseEnter={() => {
     if (item.photo) {
       const img = new Image();
@@ -213,9 +236,18 @@ function ListingCard({
         <CardMedia item={item} isWant={isWant} emoji={emoji} typeColor={typeColor} typeLabel={typeLabel} isNew={isNew} DC={DC} isFaved={isFaved} toggleFav={toggleFav} />
 
         <div style={CC.listingBody}>
-          <div style={CC.listingTitle(DC)}>
+          <a
+            href={listingHref}
+            onClick={handleListingLinkClick}
+            style={{
+              ...CC.listingTitle(DC),
+              display: "block",
+              color: "inherit",
+              textDecoration: "none"
+            }}
+          >
             {item.title || item.category}
-          </div>
+          </a>
 
           <div style={S.rowCenterGap4Overflow}>
             <span style={CC.listingPrice}>
