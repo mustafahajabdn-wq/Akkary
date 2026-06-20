@@ -8,6 +8,17 @@ const RELOAD_GUARD_KEY = "aqari_force_cache_reload_in_progress";
 const POLL_INTERVAL_MS = 60 * 1000;
 const EMPTY_BASELINE_VERSION = "0";
 
+const LOCAL_CACHE_PREFIXES = [
+  "geo_locations_",
+  "geo_villages_",
+  "geo_all_coords_",
+];
+
+const LOCAL_CACHE_KEYS = [
+  "aqari_app_settings_cache_v1",
+  "aqari_property_types_cache_v1",
+];
+
 let watcherStarted = false;
 let baselineReady = false;
 let realtimeChannel = null;
@@ -69,11 +80,36 @@ async function clearBrowserCachesDirectly() {
   await Promise.all(names.map(name => caches.delete(name)));
 }
 
+function clearLocationAndSettingsStorage() {
+  if (typeof window === "undefined") return;
+
+  try {
+    const keysToDelete = [];
+
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index);
+      if (!key) continue;
+
+      if (
+        LOCAL_CACHE_KEYS.includes(key) ||
+        LOCAL_CACHE_PREFIXES.some(prefix => key.startsWith(prefix))
+      ) {
+        keysToDelete.push(key);
+      }
+    }
+
+    keysToDelete.forEach(key => localStorage.removeItem(key));
+  } catch (error) {
+    console.warn("Location/settings cache clear failed:", error);
+  }
+}
+
 async function clearApplicationDataCaches() {
   try {
-    // يمسح فقط كاش القوائم والتفاصيل والصور الخاص بالتطبيق.
+    // يمسح كاش القوائم والتفاصيل والصور الخاص بالتطبيق.
     // لا يمسح جلسة الدخول أو مسودات إضافة الإعلانات.
     await clearAllRuntimeCache();
+    clearLocationAndSettingsStorage();
   } catch (error) {
     console.warn("Application data cache clear failed:", error);
   }
@@ -107,7 +143,7 @@ export async function requestLocalCacheRefresh(version = Date.now()) {
   writeLocalVersion(normalized);
 
   try {
-    // Cache Storage وحده لا يكفي: تفاصيل الإعلانات والقوائم محفوظة أيضاً في localStorage.
+    // Cache Storage وحده لا يكفي: بيانات المواقع والإعدادات محفوظة أيضًا في localStorage.
     await clearApplicationDataCaches();
 
     if ("serviceWorker" in navigator) {
@@ -259,7 +295,9 @@ export function startCacheVersionWatcher() {
     document.removeEventListener("visibilitychange", handleVisibility);
 
     if (realtimeChannel) {
-      sb.removeChannel(realtimeChannel).catch(() => {});
+      try {
+        sb.removeChannel(realtimeChannel);
+      } catch {}
       realtimeChannel = null;
     }
   };
