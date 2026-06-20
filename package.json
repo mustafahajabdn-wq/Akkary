@@ -8,6 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "prebuild": "node scripts/ensure-sw.js",
+    "test:restricted-areas": "node scripts/test-restricted-areas.mjs",
     "check:architecture": "node scripts/check-architecture.cjs",
     "check:detachable-admin": "node scripts/check-detachable-admin.cjs"
   },
