@@ -8,9 +8,13 @@ import { shouldStartVisitorPresence } from "../shared/utils/realtimePolicy.js";
 import { startCacheVersionWatcher } from "../shared/services/cacheVersionService.js";
 import { installAddPageDraftDebounce } from "../shared/utils/addPageDraftDebounce.js";
 import { installRestrictedAreaGuards } from "../shared/utils/installRestrictedAreaGuards.js";
+import { installGeoCacheMigration } from "../shared/utils/installGeoCacheMigration.js";
 import { primeRestrictedAreaRules } from "../shared/services/restrictedAreaRulesService.js";
 import RestrictedAreaNotice from "../shared/components/common/RestrictedAreaNotice.jsx";
 import LocationTerminologyObserver from "../shared/components/common/LocationTerminologyObserver.jsx";
+
+// يمسح كاش المدن والمناطق والمواقع القديم مرة واحدة قبل أن تقرأه أي صفحة.
+installGeoCacheMigration();
 
 // ── تجاهل تحذير قفل Supabase (معروف وغير ضار) ──────────────────
 // يحدث عندما يتسابق طلبان على auth token (تبويبين، أو OAuth retry + subscribe)
