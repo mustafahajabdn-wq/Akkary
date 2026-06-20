@@ -17,7 +17,9 @@ const ALLOWED_REST_TABLES = new Set([
   "app_settings",
   "account_upgrade_requests" ,
   "blocked_users",
+  "cities",
   "conversations",
+  "districts",
   "error_logs",
   "favorites",
   "listing_images",
@@ -30,6 +32,7 @@ const ALLOWED_REST_TABLES = new Set([
   "push_subscriptions",
   "reports",
   "saved_searches",
+  "villages",
 ]);
 
 const ALLOWED_RPC = new Set([
@@ -48,6 +51,7 @@ const ADMIN_ONLY_RPC = new Set([
 ]);
 
 const ALLOWED_FUNCTIONS = new Set(["send-push"]);
+const GEO_TABLES = new Set(["cities", "districts", "villages"]);
 
 function normalizeBody(body, headers) {
   if (body == null) return undefined;
@@ -132,6 +136,17 @@ function assertAllowedAdminRequest({ path, method, role, allowedPages }) {
 
     const tableName = parts[2];
     if (!ALLOWED_REST_TABLES.has(tableName)) fail(403, "REST table path is not in the admin allowlist");
+
+    if (GEO_TABLES.has(tableName)) {
+      const canManageGeo = isFullAdmin || hasAllowedPage(allowedPages, "adminListings");
+      if (!canManageGeo) {
+        fail(403, "Geographic area administration requires listings permission");
+      }
+
+      if (upperMethod === "DELETE") {
+        fail(405, "Deleting geographic records is not allowed from this page");
+      }
+    }
 
     // تعديل إعدادات التطبيق:
     // - role_permissions يبقى للمدير الكامل فقط
