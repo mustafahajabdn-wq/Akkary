@@ -19,6 +19,69 @@ function integer(value) {
   return Number.isFinite(number) ? Math.trunc(number) : 0;
 }
 
+function firstRow(value) {
+  return Array.isArray(value) ? value[0] || null : null;
+}
+
+function hasChanged(previousValue, nextValue) {
+  return text(previousValue) !== text(nextValue);
+}
+
+function buildEqQuery(filters = {}) {
+  const parts = Object.entries(filters)
+    .filter(([, value]) => text(value))
+    .map(([key, value]) => `${encodeURIComponent(key)}=eq.${encodeURIComponent(text(value))}`);
+
+  return parts.join("&");
+}
+
+async function patchMatchingListings(filters, payload) {
+  const entries = Object.entries(filters).filter(([, value]) => text(value));
+  if (entries.length !== Object.keys(filters).length || !entries.length) return;
+
+  const query = buildEqQuery(filters);
+  if (!query) return;
+
+  await adminPatch(`/rest/v1/listings?${query}`, payload);
+}
+
+async function fetchCityById(id) {
+  if (!id) return null;
+  const rows = await adminGet(
+    `/rest/v1/cities?id=eq.${encodeURIComponent(id)}&select=id,name`,
+    []
+  );
+  return firstRow(rows);
+}
+
+async function fetchDistrictById(id) {
+  if (!id) return null;
+  const rows = await adminGet(
+    `/rest/v1/districts?id=eq.${encodeURIComponent(id)}&select=id,name,city_id`,
+    []
+  );
+  return firstRow(rows);
+}
+
+async function fetchVillageById(id) {
+  if (!id) return null;
+  const rows = await adminGet(
+    `/rest/v1/villages?id=eq.${encodeURIComponent(id)}&select=id,name,district_id`,
+    []
+  );
+  return firstRow(rows);
+}
+
+async function fetchDistrictContext(id) {
+  const district = await fetchDistrictById(id);
+  if (!district) return null;
+  const city = await fetchCityById(district.city_id);
+  return {
+    district,
+    city,
+  };
+}
+
 export async function fetchLocationsAdminData() {
   const [cities, districts, villages] = await Promise.all([
     adminGet(
@@ -49,7 +112,16 @@ export async function saveCity({ id = null, name, sortOrder = 0 }) {
   };
 
   if (id) {
+    const previous = await fetchCityById(id);
     await adminPatch(`/rest/v1/cities?id=eq.${encodeURIComponent(id)}`, payload);
+
+    if (previous?.name && hasChanged(previous.name, payload.name)) {
+      await patchMatchingListings(
+        { city: previous.name },
+        { city: payload.name }
+      );
+    }
+
     return id;
   }
 
@@ -78,7 +150,30 @@ export async function saveDistrict({
   };
 
   if (id) {
+    const previousContext = await fetchDistrictContext(id);
+    const nextCity = await fetchCityById(cityId);
+
     await adminPatch(`/rest/v1/districts?id=eq.${encodeURIComponent(id)}`, payload);
+
+    const previousDistrict = previousContext?.district;
+    const previousCity = previousContext?.city;
+    const locationChanged =
+      hasChanged(previousDistrict?.name, payload.name) ||
+      String(previousDistrict?.city_id || "") !== String(cityId || "");
+
+    if (locationChanged && previousCity?.name && previousDistrict?.name && nextCity?.name) {
+      await patchMatchingListings(
+        {
+          city: previousCity.name,
+          district: previousDistrict.name,
+        },
+        {
+          city: nextCity.name,
+          district: payload.name,
+        }
+      );
+    }
+
     return id;
   }
 
@@ -107,7 +202,37 @@ export async function saveVillage({
   };
 
   if (id) {
+    const previousVillage = await fetchVillageById(id);
+    const previousContext = await fetchDistrictContext(previousVillage?.district_id);
+    const nextContext = await fetchDistrictContext(districtId);
+
     await adminPatch(`/rest/v1/villages?id=eq.${encodeURIComponent(id)}`, payload);
+
+    const parentChanged = String(previousVillage?.district_id || "") !== String(districtId || "");
+    const locationChanged = hasChanged(previousVillage?.name, payload.name) || parentChanged;
+
+    if (
+      locationChanged &&
+      previousVillage?.name &&
+      previousContext?.city?.name &&
+      previousContext?.district?.name &&
+      nextContext?.city?.name &&
+      nextContext?.district?.name
+    ) {
+      await patchMatchingListings(
+        {
+          city: previousContext.city.name,
+          district: previousContext.district.name,
+          village: previousVillage.name,
+        },
+        {
+          city: nextContext.city.name,
+          district: nextContext.district.name,
+          village: payload.name,
+        }
+      );
+    }
+
     return id;
   }
 
