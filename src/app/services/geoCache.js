@@ -1,10 +1,10 @@
-// geoCache.js — المصدر الوحيد لبيانات المدينة/المنطقة أو الحي/القرية داخل التطبيق
+// geoCache.js — المصدر الوحيد لبيانات المدينة/المنطقة أو الحي/الموقع داخل التطبيق
 // المدن والمناطق تُحمَّل دفعة واحدة ثم تُقرأ محلياً في كل الصفحات.
-// القرى تبقى lazy حسب المنطقة، لكنها محفوظة في localStorage.
+// المواقع تبقى lazy حسب المنطقة، لكنها محفوظة في localStorage.
 
 import { getSupabase } from "../../shared/services/supabaseClient.js";
 
-const VERSION = "v7";
+const VERSION = "v8";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const KEY_LOCATIONS = `geo_locations_${VERSION}`; // { cities, districts, ... }
 const KEY_VILLAGES = `geo_villages_${VERSION}`;   // { districtId: [{id,name,lat,lng}] }
