@@ -1,10 +1,10 @@
-// geoCache.js — المصدر الوحيد لبيانات المدن/الأحياء/القرى داخل التطبيق
-// المدن والأحياء تُحمَّل دفعة واحدة ثم تُقرأ محلياً في كل الصفحات.
-// القرى تبقى lazy حسب الحي، لكنها محفوظة في الذاكرة و localStorage.
+// geoCache.js — المصدر الوحيد لبيانات المدينة/المنطقة أو الحي/القرية داخل التطبيق
+// المدن والمناطق تُحمَّل دفعة واحدة ثم تُقرأ محلياً في كل الصفحات.
+// القرى تبقى lazy حسب المنطقة، لكنها محفوظة في localStorage.
 
 import { getSupabase } from "../../shared/services/supabaseClient.js";
 
-const VERSION = "v6";
+const VERSION = "v7";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const KEY_LOCATIONS = `geo_locations_${VERSION}`; // { cities, districts, ... }
 const KEY_VILLAGES = `geo_villages_${VERSION}`;   // { districtId: [{id,name,lat,lng}] }
@@ -162,13 +162,18 @@ export async function primeGeoCache(options = {}) {
 
 export async function refreshGeoCache() {
   locationsMemory = null;
+  locationsPromise = null;
   allCoordsMemory = null;
+  allCoordsPromise = null;
+
   if (canUseStorage()) {
     try {
       window.localStorage.removeItem(KEY_LOCATIONS);
+      window.localStorage.removeItem(KEY_VILLAGES);
       window.localStorage.removeItem(KEY_ALL_COORDS);
     } catch {}
   }
+
   return loadLocationCache({ force: true });
 }
 
