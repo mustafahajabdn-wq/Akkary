@@ -7,6 +7,7 @@ export const adminRoutePaths = {
   adminDashboard: "/admin/dashboard",
   adminUsers: "/admin/users",
   adminListings: "/admin/listings",
+  adminRestrictedAreas: "/admin/restricted-areas",
   adminReports: "/admin/reports",
   adminBroadcast: "/admin/broadcast",
   adminSettings: "/admin/settings",
