@@ -1,5 +1,5 @@
 import { listingService } from "../../app/services/listingService.js";
-import { assertListingAreaAllowed } from "./restrictedAreas.js";
+import { assertListingAreaAllowedAsync } from "../services/restrictedAreaRulesService.js";
 
 let installed = false;
 
@@ -13,7 +13,7 @@ export function installRestrictedAreaGuards() {
     payload,
     options
   ) {
-    assertListingAreaAllowed(payload, "add");
+    await assertListingAreaAllowedAsync(payload, "add");
     return originalCreateListing(payload, options);
   };
 }
