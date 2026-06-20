@@ -1,6 +1,6 @@
 import React from "react";
 import { Navigate } from "react-router-dom";
-import RestrictedAreasPage from "./RestrictedAreasPage.jsx";
+import LocationsPage from "./LocationsPage.jsx";
 
 export default function RestrictedAreasPageRoute(props) {
   const { user } = props;
@@ -12,5 +12,5 @@ export default function RestrictedAreasPageRoute(props) {
     return <Navigate to="/admin/dashboard" replace />;
   }
 
-  return <RestrictedAreasPage {...props} />;
+  return <LocationsPage {...props} />;
 }
