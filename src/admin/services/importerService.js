@@ -3,16 +3,14 @@ import {
   importListingRow as importListingRowBase,
   uploadImportedImage,
 } from "./adminService.js";
-import {
-  assertListingAreaAllowed,
-  reportImportedListingSuccess,
-} from "../../shared/utils/restrictedAreas.js";
+import { reportImportedListingSuccess } from "../../shared/utils/restrictedAreas.js";
+import { assertListingAreaAllowedAsync } from "../../shared/services/restrictedAreaRulesService.js";
 
 export { attachImportedImages, uploadImportedImage };
 
 export async function importListingRow(listing) {
-  // هذا الفحص يسبق استدعاء الإدخال الفعلي، لذلك لا يصل الإعلان المحظور إلى Supabase.
-  assertListingAreaAllowed(listing, "import");
+  // الفحص يسبق استدعاء الإدخال الفعلي، لذلك لا يصل الإعلان المحظور إلى Supabase.
+  await assertListingAreaAllowedAsync(listing, "import");
 
   const result = await importListingRowBase(listing);
   reportImportedListingSuccess(listing);
