@@ -59,8 +59,8 @@ export function buildAdminProfileMenu(user, counts = {}) {
       count: formatCount(counts.activeListingsCount)
     },
     {
-      icon: "🛡️",
-      label: "المناطق المحظورة",
+      icon: "🗺️",
+      label: "المدن والمناطق",
       action: "adminRestrictedAreas",
       show: canAccess("adminListings")
     },
