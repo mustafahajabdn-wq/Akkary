@@ -1,6 +1,6 @@
 import React from "react";
 import { Navigate } from "react-router-dom";
-import LocationsHierarchyPage from "./LocationsHierarchyPage.jsx";
+import LocationsHierarchyDisplayPage from "./LocationsHierarchyDisplayPage.jsx";
 
 export default function RestrictedAreasPageRoute(props) {
   const { user } = props;
@@ -12,5 +12,5 @@ export default function RestrictedAreasPageRoute(props) {
     return <Navigate to="/admin/dashboard" replace />;
   }
 
-  return <LocationsHierarchyPage {...props} />;
+  return <LocationsHierarchyDisplayPage {...props} />;
 }
