@@ -20,6 +20,7 @@ import AdminEngagementOverview from "./components/AdminEngagementOverview.jsx";
 import AdminSQLPage from "./pages/AdminSQLPage.jsx";
 import ImporterPage from "./pages/ImporterPage.jsx";
 import PendingPage from "./pages/PendingPage.jsx";
+import RestrictedAreasPage from "./pages/RestrictedAreasPage.jsx";
 
 const ADMIN_COMPONENTS = {
   AdminDashboard,
@@ -38,6 +39,7 @@ const ADMIN_COMPONENTS = {
   AdminSQLPage,
   ImporterPage,
   PendingPage,
+  RestrictedAreasPage,
 };
 
 function buildAdminElement(route, props) {
