@@ -48,13 +48,9 @@ self.addEventListener('message', event => {
     (async () => {
       const cacheNames = await caches.keys();
 
-      // لا نحذف Workbox precache حتى يبقى التطبيق قابلاً للفتح دون إنترنت.
-      // عند نشر إصدار جديد ينظف Workbox النسخ القديمة تلقائياً أثناء التفعيل.
-      const runtimeCaches = cacheNames.filter(
-        cacheName => !cacheName.startsWith('workbox-precache')
-      );
-
-      await Promise.all(runtimeCaches.map(cacheName => caches.delete(cacheName)));
+      // عند طلب التحديث الإجباري نحذف جميع الكاشات، بما فيها Workbox precache.
+      // إبقاء precache كان يسمح أحياناً بتحميل JavaScript القديم بعد إعادة التشغيل.
+      await Promise.all(cacheNames.map(cacheName => caches.delete(cacheName)));
 
       const windows = await self.clients.matchAll({
         type: 'window',
