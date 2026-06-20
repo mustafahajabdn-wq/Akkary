@@ -10,6 +10,7 @@ import { installAddPageDraftDebounce } from "../shared/utils/addPageDraftDebounc
 import { installRestrictedAreaGuards } from "../shared/utils/installRestrictedAreaGuards.js";
 import { primeRestrictedAreaRules } from "../shared/services/restrictedAreaRulesService.js";
 import RestrictedAreaNotice from "../shared/components/common/RestrictedAreaNotice.jsx";
+import LocationTerminologyObserver from "../shared/components/common/LocationTerminologyObserver.jsx";
 
 // ── تجاهل تحذير قفل Supabase (معروف وغير ضار) ──────────────────
 // يحدث عندما يتسابق طلبان على auth token (تبويبين، أو OAuth retry + subscribe)
@@ -80,5 +81,6 @@ ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <App />
     <RestrictedAreaNotice />
+    <LocationTerminologyObserver />
   </React.StrictMode>
 );
