@@ -4,6 +4,7 @@ export const adminPageRoutes = [
   { path: "dashboard", pageName: "adminDashboard", component: "AdminDashboard" },
   { path: "users", pageName: "adminUsers", component: "AdminUsers" },
   { path: "listings", pageName: "adminListings", component: "AdminListings" },
+  { path: "restricted-areas", pageName: "adminListings", component: "RestrictedAreasPage" },
   { path: "reports", pageName: "adminReports", component: "AdminReports" },
   { path: "broadcast", pageName: "adminBroadcast", component: "AdminBroadcast" },
   { path: "settings", pageName: "adminSettings", component: "AdminSettings" },
