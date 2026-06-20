@@ -5,6 +5,9 @@ import { CacheFirst, NetworkFirst } from 'workbox-strategies';
 import { ExpirationPlugin } from 'workbox-expiration';
 import { CacheableResponsePlugin } from 'workbox-cacheable-response';
 
+// أثناء تثبيت نسخة جديدة تكون registration.active هي النسخة السابقة.
+const IS_SERVICE_WORKER_UPDATE = Boolean(self.registration?.active);
+
 // تفعيل Service Worker الجديد فوراً بدون انتظار
 self.skipWaiting();
 clientsClaim();
@@ -33,6 +36,33 @@ function isAppIconOrManifestAsset(url) {
     file === "manifest.webmanifest";
 }
 
+async function notifyWindowsToReload(version) {
+  const windows = await self.clients.matchAll({
+    type: 'window',
+    includeUncontrolled: true,
+  });
+
+  windows.forEach(client => {
+    client.postMessage({
+      type: 'FORCE_APP_RELOAD',
+      version: version || Date.now(),
+    });
+  });
+}
+
+// عند وصول Service Worker جديد فوق نسخة قديمة، أعد تحميل الصفحات المفتوحة.
+// هذا يخرج الأجهزة العالقة على JavaScript أو Workbox precache قديم.
+self.addEventListener('activate', event => {
+  if (!IS_SERVICE_WORKER_UPDATE) return;
+
+  event.waitUntil(
+    (async () => {
+      await self.clients.claim();
+      await notifyWindowsToReload(`sw-${Date.now()}`);
+    })()
+  );
+});
+
 // استقبال أوامر التحديث الإجباري من التطبيق.
 self.addEventListener('message', event => {
   const message = event.data || {};
@@ -52,17 +82,7 @@ self.addEventListener('message', event => {
       // إبقاء precache كان يسمح أحياناً بتحميل JavaScript القديم بعد إعادة التشغيل.
       await Promise.all(cacheNames.map(cacheName => caches.delete(cacheName)));
 
-      const windows = await self.clients.matchAll({
-        type: 'window',
-        includeUncontrolled: true,
-      });
-
-      windows.forEach(client => {
-        client.postMessage({
-          type: 'FORCE_APP_RELOAD',
-          version: message.version || Date.now(),
-        });
-      });
+      await notifyWindowsToReload(message.version || Date.now());
     })()
   );
 });
