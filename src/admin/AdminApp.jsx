@@ -42,35 +42,6 @@ const ADMIN_COMPONENTS = {
   RestrictedAreasPage: RestrictedAreasPageRoute,
 };
 
-function RestrictedAreasShortcut() {
-  return (
-    <a
-      href="/admin/restricted-areas"
-      aria-label="إدارة المناطق المحظورة"
-      style={{
-        position: "fixed",
-        left: 16,
-        bottom: 84,
-        zIndex: 90,
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 7,
-        padding: "10px 14px",
-        borderRadius: 999,
-        background: "#7C2D12",
-        color: "#fff",
-        textDecoration: "none",
-        fontFamily: "Tajawal,Arial,sans-serif",
-        fontSize: 12,
-        fontWeight: 900,
-        boxShadow: "0 10px 28px rgba(124,45,18,.28)",
-      }}
-    >
-      🛡️ المناطق المحظورة
-    </a>
-  );
-}
-
 function buildAdminElement(route, props) {
   const Component = ADMIN_COMPONENTS[route.component];
   if (!Component) return <Navigate to="dashboard" replace />;
@@ -88,13 +59,6 @@ function buildAdminElement(route, props) {
 
   if (route.component === "AdminListings") {
     Object.assign(pageProps, { setDetail, setDetailPrevPage, openDetail });
-
-    return (
-      <>
-        <Component {...pageProps} />
-        <RestrictedAreasShortcut />
-      </>
-    );
   }
 
   if (route.component === "AdminUserDetail") {
