@@ -1,14 +1,12 @@
 import { getSupabase } from "./supabaseClient.js";
 import {
+  buildRestrictedAreaIndex,
   dispatchRestrictedAreaEvent,
-  findRestrictedArea,
+  findRestrictedAreaDetail,
   RESTRICTED_AREA_MESSAGE,
   RestrictedAreaError,
+  setRestrictedAreaIndex,
 } from "../utils/restrictedAreas.js";
-import {
-  buildDatabaseRestrictionIndex,
-  findRestrictedAreaInDatabaseIndex,
-} from "../utils/restrictedAreaDatabaseMatcher.js";
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
@@ -23,14 +21,10 @@ async function fetchRestrictionRows() {
     supabase.from("cities").select("id,name"),
     supabase
       .from("districts")
-      .select(
-        "id,name,city_id,is_restricted,restriction_reason,restricted_aliases"
-      ),
+      .select("id,name,city_id,is_restricted,restriction_reason"),
     supabase
       .from("villages")
-      .select(
-        "id,name,district_id,is_restricted,restriction_reason,restricted_aliases"
-      )
+      .select("id,name,district_id,is_restricted,restriction_reason")
       .eq("is_restricted", true),
   ]);
 
@@ -52,8 +46,9 @@ export async function loadRestrictedAreaIndex({ force = false } = {}) {
 
   loadingPromise = fetchRestrictionRows()
     .then((rows) => {
-      cachedIndex = buildDatabaseRestrictionIndex(rows);
+      cachedIndex = buildRestrictedAreaIndex(rows);
       cachedAt = Date.now();
+      setRestrictedAreaIndex(cachedIndex);
       return cachedIndex;
     })
     .finally(() => {
@@ -67,33 +62,22 @@ export function clearRestrictedAreaRulesCache() {
   cachedIndex = null;
   cachedAt = 0;
   loadingPromise = null;
+  setRestrictedAreaIndex({});
 }
 
 export async function findRestrictedAreaResolved(listing = {}) {
-  try {
-    const databaseIndex = await loadRestrictedAreaIndex();
-    const databaseRestriction = findRestrictedAreaInDatabaseIndex(
-      listing,
-      databaseIndex
-    );
+  let databaseIndex;
 
-    if (databaseRestriction) return databaseRestriction;
+  try {
+    databaseIndex = await loadRestrictedAreaIndex();
   } catch (error) {
-    console.warn(
-      "[restrictedAreaRulesService] database rules unavailable; using fallback rules",
-      error
+    console.error("[restrictedAreaRulesService] failed to load database rules", error);
+    throw new Error(
+      "تعذر التحقق من المناطق المحظورة حاليًا. يرجى المحاولة مرة أخرى بعد قليل."
     );
   }
 
-  const fallbackArea = findRestrictedArea(listing);
-  if (!fallbackArea) return null;
-
-  return {
-    area: fallbackArea,
-    reason: RESTRICTED_AREA_MESSAGE,
-    level: "fallback",
-    source: "fallback",
-  };
+  return findRestrictedAreaDetail(listing, databaseIndex);
 }
 
 export async function assertListingAreaAllowedAsync(
