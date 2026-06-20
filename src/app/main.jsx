@@ -7,6 +7,8 @@ import { startVisitorPresence } from "../shared/services/visitorPresence.js";
 import { shouldStartVisitorPresence } from "../shared/utils/realtimePolicy.js";
 import { startCacheVersionWatcher } from "../shared/services/cacheVersionService.js";
 import { installAddPageDraftDebounce } from "../shared/utils/addPageDraftDebounce.js";
+import { installRestrictedAreaGuards } from "../shared/utils/installRestrictedAreaGuards.js";
+import RestrictedAreaNotice from "../shared/components/common/RestrictedAreaNotice.jsx";
 
 // ── تجاهل تحذير قفل Supabase (معروف وغير ضار) ──────────────────
 // يحدث عندما يتسابق طلبان على auth token (تبويبين، أو OAuth retry + subscribe)
@@ -25,6 +27,9 @@ if (typeof window !== "undefined") {
 
 // تخفيف حفظ مسودة صفحة إضافة الإعلان: آخر تغيير فقط يُكتب بعد 700ms.
 installAddPageDraftDebounce(700);
+
+// يمنع إنشاء إعلان فردي ضمن منطقة محظورة قبل الوصول إلى Supabase.
+installRestrictedAreaGuards();
 
 // تسجيل الدخول بواسطة Facebook جاهز ويعمل، لكنه مخفي مؤقتًا حتى يصبح تطبيق Meta منشورًا للعامة.
 // لإظهاره لاحقًا: أعد استيراد installFacebookLoginEnhancer وشغّل installFacebookLoginEnhancer().
@@ -62,5 +67,6 @@ startCacheVersionWatcher();
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <App />
+    <RestrictedAreaNotice />
   </React.StrictMode>
 );
