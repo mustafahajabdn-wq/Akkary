@@ -133,7 +133,7 @@ function RestrictedModal({ detail, supportNumber, onClose }) {
             fontSize: 20,
           }}
         >
-          يلزم التحقق من وثائق الملكية
+          لا يمكن نشر الإعلان
         </h2>
 
         <div
