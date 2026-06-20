@@ -16,13 +16,13 @@ const LOCATION_KEYS = ["city", "district", "village"];
 const LOCATION_LABELS = {
   city: "المدينة",
   district: "المنطقة / الحي",
-  village: "القرية",
+  village: "الموقع",
 };
 
 const LOCATION_PLACEHOLDERS = {
   city: "— اختر المدينة —",
   district: "— اختر المنطقة / الحي —",
-  village: "— اختر القرية —",
+  village: "— اختر الموقع —",
 };
 
 function normalizeLocationField(field) {
