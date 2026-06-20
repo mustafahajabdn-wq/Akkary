@@ -8,6 +8,7 @@ import { shouldStartVisitorPresence } from "../shared/utils/realtimePolicy.js";
 import { startCacheVersionWatcher } from "../shared/services/cacheVersionService.js";
 import { installAddPageDraftDebounce } from "../shared/utils/addPageDraftDebounce.js";
 import { installRestrictedAreaGuards } from "../shared/utils/installRestrictedAreaGuards.js";
+import { primeRestrictedAreaRules } from "../shared/services/restrictedAreaRulesService.js";
 import RestrictedAreaNotice from "../shared/components/common/RestrictedAreaNotice.jsx";
 
 // ── تجاهل تحذير قفل Supabase (معروف وغير ضار) ──────────────────
@@ -30,6 +31,17 @@ installAddPageDraftDebounce(700);
 
 // يمنع إنشاء إعلان فردي ضمن منطقة محظورة قبل الوصول إلى Supabase.
 installRestrictedAreaGuards();
+
+// تحميل قواعد الحظر من جداول المناطق مبكرًا لتجنب أي تأخير عند الحفظ.
+if (typeof window !== "undefined") {
+  const primeRestrictions = () => primeRestrictedAreaRules();
+
+  if (typeof window.requestIdleCallback === "function") {
+    window.requestIdleCallback(primeRestrictions, { timeout: 2500 });
+  } else {
+    window.setTimeout(primeRestrictions, 1200);
+  }
+}
 
 // تسجيل الدخول بواسطة Facebook جاهز ويعمل، لكنه مخفي مؤقتًا حتى يصبح تطبيق Meta منشورًا للعامة.
 // لإظهاره لاحقًا: أعد استيراد installFacebookLoginEnhancer وشغّل installFacebookLoginEnhancer().
