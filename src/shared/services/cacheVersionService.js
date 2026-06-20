@@ -143,8 +143,12 @@ export async function requestLocalCacheRefresh(version = Date.now()) {
   writeLocalVersion(normalized);
 
   try {
-    // Cache Storage وحده لا يكفي: بيانات المواقع والإعدادات محفوظة أيضًا في localStorage.
+    // بيانات المواقع محفوظة في localStorage وليست ضمن Cache Storage.
     await clearApplicationDataCaches();
+
+    // نمسح جميع Cache Storage مباشرة من الصفحة، بما فيها Workbox precache.
+    // الاعتماد على Service Worker وحده كان يترك حزمة JavaScript القديمة أحياناً.
+    await clearBrowserCachesDirectly();
 
     if ("serviceWorker" in navigator) {
       const registration = await navigator.serviceWorker.getRegistration();
@@ -155,24 +159,32 @@ export async function requestLocalCacheRefresh(version = Date.now()) {
         console.warn("Service Worker update check failed:", error);
       }
 
-      const worker = navigator.serviceWorker.controller || registration?.active;
+      try {
+        registration?.waiting?.postMessage({ type: "SKIP_WAITING" });
+      } catch {}
+
+      const worker =
+        registration?.waiting ||
+        navigator.serviceWorker.controller ||
+        registration?.active;
 
       if (worker) {
         worker.postMessage({
           type: "FORCE_CACHE_REFRESH",
           version: normalized,
         });
-
-        // احتياط إذا لم تصل رسالة الرجوع من Service Worker.
-        window.setTimeout(() => reloadWithVersion(normalized), 2500);
-        return;
       }
     }
 
-    await clearBrowserCachesDirectly();
-    reloadWithVersion(normalized);
+    // لا ننتظر رد Service Worker؛ النسخة القديمة قد لا تعيد الرسالة.
+    window.setTimeout(() => reloadWithVersion(normalized), 900);
   } catch (error) {
     console.error("Force cache refresh failed:", error);
+
+    try {
+      await clearBrowserCachesDirectly();
+    } catch {}
+
     reloadWithVersion(normalized);
   }
 }
