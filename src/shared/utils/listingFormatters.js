@@ -117,8 +117,6 @@ export function getListingPhone(item) {
 }
 
 export function getListingUrl(item, baseUrl = DEFAULT_BASE_URL) {
-  if (item?.external_url) return item.external_url;
-
   const id = item?.id;
   if (!id) return baseUrl;
 
