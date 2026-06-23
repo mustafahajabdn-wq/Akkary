@@ -13,13 +13,11 @@ import { installGeoCacheMigrationV9 } from "../shared/utils/installGeoCacheMigra
 import { primeRestrictedAreaRules } from "../shared/services/restrictedAreaRulesService.js";
 import RestrictedAreaNotice from "../shared/components/common/RestrictedAreaNotice.jsx";
 import LocationTerminologyObserver from "../shared/components/common/LocationTerminologyObserver.jsx";
+import ReportReasonObserver from "../shared/components/common/ReportReasonObserver.jsx";
 
-// يمسح كاش المدن والمناطق والمواقع القديم مرة واحدة قبل أن تقرأه أي صفحة.
 installGeoCacheMigration();
 installGeoCacheMigrationV9();
 
-// ── تجاهل تحذير قفل Supabase (معروف وغير ضار) ──────────────────
-// يحدث عندما يتسابق طلبان على auth token (تبويبين، أو OAuth retry + subscribe)
 if (typeof window !== "undefined") {
   window.addEventListener("unhandledrejection", event => {
     const msg = event.reason?.message || "";
@@ -33,13 +31,9 @@ if (typeof window !== "undefined") {
   });
 }
 
-// تخفيف حفظ مسودة صفحة إضافة الإعلان: آخر تغيير فقط يُكتب بعد 700ms.
 installAddPageDraftDebounce(700);
-
-// يمنع إنشاء إعلان فردي ضمن منطقة محظورة قبل الوصول إلى Supabase.
 installRestrictedAreaGuards();
 
-// تحميل قواعد الحظر من جداول المناطق مبكرًا لتجنب أي تأخير عند الحفظ.
 if (typeof window !== "undefined") {
   const primeRestrictions = () => primeRestrictedAreaRules();
 
@@ -50,13 +44,8 @@ if (typeof window !== "undefined") {
   }
 }
 
-// تسجيل الدخول بواسطة Facebook جاهز ويعمل، لكنه مخفي مؤقتًا حتى يصبح تطبيق Meta منشورًا للعامة.
-// لإظهاره لاحقًا: أعد استيراد installFacebookLoginEnhancer وشغّل installFacebookLoginEnhancer().
-
-// تسجيل أخطاء المستخدمين
 installGlobalErrorLogger();
 
-// تسجيل حضور المتصفح بعد أول رسم للصفحة فقط، وليس أثناء فحوصات الأداء أو الصفحات العامة.
 if (typeof window !== "undefined" && shouldStartVisitorPresence()) {
   const startPresence = () => startVisitorPresence();
 
@@ -79,8 +68,6 @@ const updateSW = registerSW({
   }
 });
 
-// مراقبة رقم إصدار الكاش من app_settings.
-// عند تغييره من لوحة الإدارة يُمسح Cache Storage وتُعاد الصفحة بأحدث نسخة.
 startCacheVersionWatcher();
 
 ReactDOM.createRoot(document.getElementById("root")).render(
@@ -88,5 +75,6 @@ ReactDOM.createRoot(document.getElementById("root")).render(
     <App />
     <RestrictedAreaNotice />
     <LocationTerminologyObserver />
+    <ReportReasonObserver />
   </React.StrictMode>
 );
