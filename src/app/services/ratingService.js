@@ -5,6 +5,8 @@
 
 import { getSupabase } from "../../shared/services/supabaseClient.js";
 
+const OWNERSHIP_ISSUE_REASON = "المنطقة عليها إشكال ملكية";
+
 // ── التقييمات ─────────────────────────────────────────────────────
 
 /**
@@ -72,10 +74,26 @@ export async function checkExistingReport(reporterId, source, itemId, conversati
   return query.maybeSingle();
 }
 
+function normalizeReportRow(row = {}) {
+  if (
+    row?.source === "listing" &&
+    row?.reason === "غير ذلك" &&
+    String(row?.details || "").trim() === OWNERSHIP_ISSUE_REASON
+  ) {
+    return {
+      ...row,
+      reason: OWNERSHIP_ISSUE_REASON,
+      details: null,
+    };
+  }
+
+  return row;
+}
+
 /**
  * إنشاء بلاغ جديد
  */
 export async function insertReport(row) {
   const sb = getSupabase();
-  return sb.from("reports").insert(row);
+  return sb.from("reports").insert(normalizeReportRow(row));
 }
