@@ -35,6 +35,35 @@ function makeCustomButton(nativeButton) {
   return button;
 }
 
+function getReportCard(firstButton) {
+  let node = firstButton?.parentElement;
+
+  while (node && node !== document.body) {
+    const hasTitle = Array.from(node.querySelectorAll("div,span,h1,h2,h3"))
+      .some((child) => String(child.textContent || "").trim() === "🚩 الإبلاغ عن إعلان");
+
+    const hasSubmit = Array.from(node.querySelectorAll("button"))
+      .some((child) => String(child.textContent || "").includes("إرسال البلاغ"));
+
+    if (hasTitle && hasSubmit) return node;
+    node = node.parentElement;
+  }
+
+  return null;
+}
+
+function keepReportModalUsable(firstButton) {
+  const card = getReportCard(firstButton);
+  if (!card) return;
+
+  card.style.maxHeight = "calc(100dvh - 120px)";
+  card.style.overflowY = "auto";
+  card.style.boxSizing = "border-box";
+  card.style.paddingBottom = "24px";
+  card.style.webkitOverflowScrolling = "touch";
+  card.scrollTop = 0;
+}
+
 function applyObserverPatch() {
   if (!isListingReportModal()) return;
 
@@ -53,9 +82,12 @@ function applyObserverPatch() {
     });
 
   if (!reasonButtons.length) return;
-  if (document.querySelector('button[data-ownership-issue-reason="true"]')) return;
 
   const firstButton = reasonButtons[0];
+  keepReportModalUsable(firstButton);
+
+  if (document.querySelector('button[data-ownership-issue-reason="true"]')) return;
+
   const fallbackButton = reasonButtons.find((button) =>
     String(button.textContent || "").includes(FALLBACK_REASON)
   );
@@ -72,6 +104,12 @@ function applyObserverPatch() {
     customButton.style.background = "#FEF2F2";
     customButton.style.color = "#DC2626";
     customButton.style.fontWeight = "800";
+
+    keepReportModalUsable(customButton);
+    window.setTimeout(() => {
+      const card = getReportCard(customButton);
+      if (card) card.scrollTop = card.scrollHeight;
+    }, 0);
   });
 
   reasonButtons.forEach((button) => {
@@ -86,6 +124,7 @@ function applyObserverPatch() {
   });
 
   firstButton.parentElement?.insertBefore(customButton, firstButton);
+  keepReportModalUsable(customButton);
 }
 
 export default function ReportReasonObserver() {
@@ -98,6 +137,8 @@ export default function ReportReasonObserver() {
     observer.observe(document.body, {
       childList: true,
       subtree: true,
+      attributes: true,
+      attributeFilter: ["style", "class"],
     });
 
     return () => observer.disconnect();
