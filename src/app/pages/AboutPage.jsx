@@ -5,6 +5,7 @@ import { BackButton } from "../../shared/components/common/BackButton.jsx";
 
 const appVersion = "1.0.0 Beta";
 const lastUpdated = "2026";
+const facebookUrl = "https://www.facebook.com/profile.php?id=61588786846983";
 
 function AboutPage({ setPage, DC }) {
   DC = DC || C;
@@ -140,6 +141,23 @@ function AboutPage({ setPage, DC }) {
       color: DC.text3,
       margin: 0,
     },
+    facebookButton: {
+      width: "100%",
+      border: "none",
+      borderRadius: 14,
+      background: "#1877F2",
+      color: "white",
+      padding: "12px 14px",
+      fontSize: 14,
+      fontWeight: 900,
+      fontFamily: "inherit",
+      cursor: "pointer",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      marginTop: 12,
+    },
     telegramButton: {
       width: "100%",
       border: "none",
@@ -155,7 +173,7 @@ function AboutPage({ setPage, DC }) {
       alignItems: "center",
       justifyContent: "center",
       gap: 8,
-      marginTop: 12,
+      marginTop: 8,
     },
     version: {
       textAlign: "center",
@@ -245,6 +263,15 @@ function AboutPage({ setPage, DC }) {
               </p>
             </div>
           </div>
+
+          <button
+            type="button"
+            style={sx.facebookButton}
+            onClick={() => window.open(facebookUrl, "_blank", "noopener,noreferrer")}
+          >
+            <span>📘</span>
+            <span>تابعنا على فيسبوك</span>
+          </button>
 
           <button
             type="button"
