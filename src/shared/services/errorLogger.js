@@ -79,16 +79,22 @@ async function getCurrentUserIdSafe() {
   }
 }
 
+function getErrorMessage(error, context = {}) {
+  return (
+    context?.message ||
+    error?.message ||
+    error?.reason?.message ||
+    error?.toString?.() ||
+    "Unknown client error"
+  );
+}
+
 export async function logClientError(error, context = {}) {
   try {
     const sb = getSupabase();
     if (!sb) return;
 
-    const message =
-      error?.message ||
-      error?.reason?.message ||
-      error?.toString?.() ||
-      "Unknown client error";
+    const message = getErrorMessage(error, context);
 
     if (shouldIgnoreError(message)) return;
 
@@ -127,12 +133,21 @@ export function installGlobalErrorLogger() {
   installed = true;
 
   window.addEventListener("error", event => {
-    logClientError(event.error || event.message, {
+    const message = event.message || "Unknown window error";
+    const isScriptError = message === "Script error." && !event.error;
+
+    logClientError(event.error || message, {
       source: "window.error",
+      message,
+      stack: event.error?.stack || null,
       extra: {
-        filename: event.filename,
-        lineno: event.lineno,
-        colno: event.colno
+        filename: event.filename || null,
+        lineno: event.lineno || null,
+        colno: event.colno || null,
+        is_script_error: isScriptError,
+        note: isScriptError
+          ? "Likely cross-origin script/WebView error; browser hides filename and stack."
+          : null
       }
     });
   });
@@ -147,7 +162,14 @@ export function installGlobalErrorLogger() {
     }
 
     logClientError(reason || message, {
-      source: "unhandledrejection"
+      source: "unhandledrejection",
+      message: message || "Unhandled promise rejection",
+      stack: reason?.stack || null,
+      extra: {
+        reason_name: reason?.name || null,
+        reason_status: reason?.status || null,
+        reason_payload: reason?.payload || null
+      }
     });
   });
-                   }
+}
