@@ -99,7 +99,7 @@ export default function AdminUsers({
 
     try {
       const list = await fetchAdminUsers();
-      const userList = Array.isArray(list) ? list : [];
+      const userList = (Array.isArray(list) ? list : []).filter(Boolean);
 
       setUsers(userList);
 
@@ -107,7 +107,7 @@ export default function AdminUsers({
         const pendingRequests = await fetchPendingAccountUpgradeRequests();
 
         const cleanedRequests = (Array.isArray(pendingRequests) ? pendingRequests : []).filter(req => {
-          const reqUser = userList.find(u => u.id === req.user_id);
+          const reqUser = userList.find(u => u?.id === req?.user_id);
 
           // لا تعرض طلبًا pending لمستخدم صار مكتبًا فعلًا.
           return reqUser?.account_type !== "office";
@@ -130,12 +130,14 @@ export default function AdminUsers({
   }
 
   async function patch(id, obj) {
+    if (!id) return;
+
     try {
       await patchAdminUser(id, obj);
 
       setUsers(prev =>
         prev.map(u =>
-          u.id === id
+          u?.id === id
             ? {
                 ...u,
                 ...obj
@@ -148,7 +150,7 @@ export default function AdminUsers({
       // إذا فشل بسبب RLS أو صلاحيات، يبقى تعديل الحساب محفوظًا.
       if (obj?.account_type === "office") {
         setUpgradeRequests(prev =>
-          prev.filter(r => r.user_id !== id)
+          prev.filter(r => r?.user_id !== id)
         );
 
         updateAccountUpgradeRequestsForUser(id, "approved", [
@@ -162,7 +164,7 @@ export default function AdminUsers({
 
       if (obj?.account_type === "individual") {
         setUpgradeRequests(prev =>
-          prev.filter(r => r.user_id !== id)
+          prev.filter(r => r?.user_id !== id)
         );
 
         updateAccountUpgradeRequestsForUser(id, "revoked", [
@@ -189,30 +191,31 @@ export default function AdminUsers({
   }, [upgradeRequests]);
 
   const upgradeUserIds = useMemo(() => {
-    return new Set(upgradeRequests.map(r => r.user_id).filter(Boolean));
+    return new Set(upgradeRequests.map(r => r?.user_id).filter(Boolean));
   }, [upgradeRequests]);
 
   const onlineCount = users.filter(u => {
-    if (!u.last_seen_at) return false;
+    if (!u?.last_seen_at) return false;
     return Date.now() - new Date(u.last_seen_at) < 120000;
   }).length;
 
   const filtered = users
+    .filter(Boolean)
     .filter(u => {
       const q = search.trim();
       if (!q) return true;
 
       return (
-        String(u.name || "").includes(q) ||
-        String(u.phone || "").includes(q) ||
-        String(u.email || "").includes(q)
+        String(u?.name || "").includes(q) ||
+        String(u?.phone || "").includes(q) ||
+        String(u?.email || "").includes(q)
       );
     })
     .filter(u => {
       if (statusFilter === "all") return true;
-      if (statusFilter === "active") return !u.is_suspended;
-      if (statusFilter === "suspended") return !!u.is_suspended;
-      if (statusFilter === "officeRequests") return upgradeUserIds.has(u.id);
+      if (statusFilter === "active") return !u?.is_suspended;
+      if (statusFilter === "suspended") return !!u?.is_suspended;
+      if (statusFilter === "officeRequests") return upgradeUserIds.has(u?.id);
       return true;
     });
 
@@ -263,12 +266,12 @@ export default function AdminUsers({
             {
               key: "active",
               label: "✅ نشط",
-              count: users.filter(u => !u.is_suspended).length
+              count: users.filter(u => !u?.is_suspended).length
             },
             {
               key: "suspended",
               label: "🚫 موقوف",
-              count: users.filter(u => u.is_suspended).length
+              count: users.filter(u => u?.is_suspended).length
             },
             {
               key: "officeRequests",
@@ -312,10 +315,10 @@ export default function AdminUsers({
           <div style={sx.s5(DC)}>لا توجد نتائج</div>
         ) : (
           filtered.map(u => {
-            const upgradeReq = upgradeMap.get(u.id);
+            const upgradeReq = upgradeMap.get(u?.id);
 
             return (
-              <div key={u.id}>
+              <div key={u?.id}>
                 {upgradeReq && (
                   <div style={sx.s6(DC)}>
                     🏢 طلب حساب مهني قيد المراجعة
