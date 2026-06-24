@@ -11,6 +11,14 @@ function normalizeExtraHeaders(extra = {}) {
   return headers;
 }
 
+function buildNetworkError(message, cause, extra = {}) {
+  const error = new Error(message);
+  error.status = 0;
+  error.cause = cause;
+  error.payload = extra;
+  return error;
+}
+
 async function getSessionAccessToken() {
   const supabase = getSupabase();
   const session = await supabase.auth.getSession().catch(() => ({ data: { session: null } }));
@@ -28,14 +36,28 @@ async function getSessionAccessToken() {
 async function callAdminProxy(payload) {
   const token = await getSessionAccessToken();
 
-  const response = await fetch(ADMIN_PROXY_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(payload),
-  });
+  let response;
+
+  try {
+    response = await fetch(ADMIN_PROXY_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch (networkError) {
+    throw buildNetworkError(
+      `Admin proxy network error: ${networkError?.message || "Failed to fetch"}`,
+      networkError,
+      {
+        path: payload?.path || null,
+        method: payload?.method || null,
+        proxy_url: ADMIN_PROXY_URL,
+      }
+    );
+  }
 
   const result = await response.json().catch(() => ({}));
 
@@ -49,7 +71,11 @@ async function callAdminProxy(payload) {
 
     const error = new Error(message);
     error.status = response.status || result?.status;
-    error.payload = result;
+    error.payload = {
+      ...result,
+      path: payload?.path || null,
+      method: payload?.method || null,
+    };
     throw error;
   }
 
@@ -322,18 +348,33 @@ export async function uploadAdminImage(path, file) {
   const token = await getSessionAccessToken();
   const base64 = arrayBufferToBase64(await file.arrayBuffer());
 
-  const response = await fetch(ADMIN_UPLOAD_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({
-      path,
-      mimeType: file.type || "application/octet-stream",
-      base64,
-    }),
-  });
+  let response;
+
+  try {
+    response = await fetch(ADMIN_UPLOAD_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        path,
+        mimeType: file.type || "application/octet-stream",
+        base64,
+      }),
+    });
+  } catch (networkError) {
+    throw buildNetworkError(
+      `Admin upload network error: ${networkError?.message || "Failed to fetch"}`,
+      networkError,
+      {
+        path,
+        upload_url: ADMIN_UPLOAD_URL,
+        file_type: file?.type || null,
+        file_size: file?.size || null,
+      }
+    );
+  }
 
   const result = await response.json().catch(() => ({}));
 
@@ -368,17 +409,31 @@ export async function deleteStoragePathsAdmin(paths = [], bucket = "listing-imag
 
   const token = await getSessionAccessToken();
 
-  const response = await fetch("/api/admin/storage-delete", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`
-    },
-    body: JSON.stringify({
-      bucket,
-      paths: clean
-    })
-  });
+  let response;
+
+  try {
+    response = await fetch("/api/admin/storage-delete", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        bucket,
+        paths: clean
+      })
+    });
+  } catch (networkError) {
+    throw buildNetworkError(
+      `Admin storage delete network error: ${networkError?.message || "Failed to fetch"}`,
+      networkError,
+      {
+        bucket,
+        paths: clean,
+        endpoint: "/api/admin/storage-delete",
+      }
+    );
+  }
 
   const result = await response.json().catch(() => ({}));
 
@@ -390,4 +445,4 @@ export async function deleteStoragePathsAdmin(paths = [], bucket = "listing-imag
   }
 
   return result;
-          }
+}
