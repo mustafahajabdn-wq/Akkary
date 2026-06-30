@@ -62,7 +62,6 @@ export default function AppRoutes({
   isFollowing,
   dark,
   setDark,
-  setLang,
   sbListings,
   hasMoreListings,
   loadMoreListings,
@@ -190,6 +189,20 @@ export default function AppRoutes({
 
       <Route
         path="/real-estate/:city/:district"
+        element={
+          <SearchPage
+            {...common}
+            setDetail={setDetail}
+            setDetailPrevPage={setDetailPrevPage}
+            openDetail={openDetail}
+            favs={favs}
+            toggleFav={toggleFav}
+          />
+        }
+      />
+
+      <Route
+        path="/real-estate/:city/:district/:categoryType"
         element={
           <SearchPage
             {...common}
@@ -429,10 +442,8 @@ export default function AppRoutes({
         <Route key={from} path={from} element={<Navigate to={to} replace />} />
       ))}
 
-      <Route path="/featured-ad" element={<Protected element={<FeaturedAdPage {...common} />} />} />
-
-      <Route path="/blocked" element={<Protected element={<BlockedPage {...common} />} />} />
-
+      <Route path="/featured-ad" element={<FeaturedAdPage {...common} />} />
+      <Route path="/blocked" element={<BlockedPage {...common} />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
