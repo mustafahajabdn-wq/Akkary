@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { getCategoryTypeDefinition } from "../src/shared/seo/categoryTypeSlugs.js";
+import { getCategoryTypeDefinition } from "./seoCategoryTypeSlugs.js";
 
 const SITE_URL = "https://www.blabladar.com";
 const MIN_AREA_LISTINGS = 1;
