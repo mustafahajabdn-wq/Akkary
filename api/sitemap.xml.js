@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { getCategoryTypeSlug } from "../src/shared/seo/categoryTypeSlugs.js";
+import { getCategoryTypeSlug } from "./seoCategoryTypeSlugs.js";
 
 const SITE_URL = "https://www.blabladar.com";
 const PAGE_SIZE = 1000;
