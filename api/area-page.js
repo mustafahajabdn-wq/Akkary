@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { getCategoryTypeDefinition } from "../src/shared/seo/categoryTypeSlugs.js";
 
 const SITE_URL = "https://www.blabladar.com";
 const MIN_AREA_LISTINGS = 1;
@@ -69,9 +70,15 @@ function nameToSlug(value = "") {
   );
 }
 
-function areaUrl(city, district = "") {
+function areaUrl(city, district = "", categoryType = "") {
   const citySlug = nameToSlug(city);
   const districtSlug = nameToSlug(district);
+  const categorySlug = String(categoryType || "").trim();
+
+  if (districtSlug && categorySlug) {
+    return `${SITE_URL}/real-estate/${citySlug}/${districtSlug}/${categorySlug}`;
+  }
+
   return districtSlug
     ? `${SITE_URL}/real-estate/${citySlug}/${districtSlug}`
     : `${SITE_URL}/real-estate/${citySlug}`;
@@ -80,11 +87,28 @@ function areaUrl(city, district = "") {
 function getAreaFromRequest(req) {
   const rawCity = req.query?.city || "";
   const rawDistrict = req.query?.district || "";
+  const rawCategoryType = req.query?.categoryType || "";
 
   const city = cleanText(slugToName(rawCity), 60);
   const district = cleanText(slugToName(rawDistrict), 80);
+  const categoryType = cleanText(String(rawCategoryType || "").trim().toLowerCase(), 80);
+  const categoryDefinition = categoryType ? getCategoryTypeDefinition(categoryType) : null;
 
-  return { city, district };
+  return { city, district, categoryType, categoryDefinition };
+}
+
+function categoryAliases(category = "") {
+  const key = String(category || "").trim();
+  const aliases = {
+    "بيت عربي": ["بيت عربي", "بيت", "منزل"],
+    "محل تجاري": ["محل تجاري", "محل"],
+    "فيلا": ["فيلا", "فيلا-مزرعة"],
+    "مزرعة": ["مزرعة", "فيلا-مزرعة"],
+    "أرض سكنية": ["أرض سكنية", "أرض"],
+    "أرض زراعية": ["أرض زراعية"],
+  };
+
+  return aliases[key] || [key].filter(Boolean);
 }
 
 async function fetchJson(url) {
@@ -109,7 +133,7 @@ async function fetchJson(url) {
   return response.json();
 }
 
-async function fetchAreaListings(city, district) {
+async function fetchAreaListings(city, district, categoryDefinition = null) {
   const today = new Date().toISOString().slice(0, 10);
   const params = new URLSearchParams();
 
@@ -122,6 +146,19 @@ async function fetchAreaListings(city, district) {
 
   if (city) params.set("city", `ilike.${city}`);
   if (district) params.set("district", `ilike.${district}`);
+
+  if (categoryDefinition?.type) {
+    params.set("type", `eq.${categoryDefinition.type}`);
+  }
+
+  if (categoryDefinition?.category) {
+    const values = categoryAliases(categoryDefinition.category);
+    if (values.length === 1) {
+      params.set("category", `eq.${values[0]}`);
+    } else if (values.length > 1) {
+      params.set("category", `in.(${values.join(",")})`);
+    }
+  }
 
   const rows = await fetchJson(`${SUPABASE_URL}/rest/v1/listings?${params.toString()}`);
   return Array.isArray(rows) ? rows : [];
@@ -150,7 +187,7 @@ async function loadIndexHtml() {
 }
 
 function removeOldSeo(html) {
-  return html
+  return String(html || "")
     .replace(/<title>[\s\S]*?<\/title>/i, "")
     .replace(/<meta\s+name=["']description["'][^>]*>/gi, "")
     .replace(/<meta\s+name=["']robots["'][^>]*>/gi, "")
@@ -201,23 +238,32 @@ function buildListingLine(listing) {
   return `${title}${parts.length ? ` — ${parts.join("، ")}` : ""}`;
 }
 
-function buildAreaSeo({ city, district, listings }) {
-  const areaName = district || city;
-  const locationText = district ? `${district} - ${city}` : city;
-  const url = areaUrl(city, district);
-  const count = listings.length;
+function buildPageTitle({ city, district, categoryDefinition }) {
+  if (categoryDefinition) {
+    const location = district ? `${district} ${city}` : city;
+    return `${categoryDefinition.titlePlural} ${categoryDefinition.action} في ${location} | طابو أخضر`;
+  }
 
-  const pageTitle = district
+  return district
     ? `عقارات للبيع والإيجار في ${district} - طابو أخضر`
     : `عقارات للبيع والإيجار في ${city} - طابو أخضر`;
+}
+
+function buildAreaSeo({ city, district, categoryType, categoryDefinition, listings }) {
+  const areaName = district || city;
+  const locationText = district ? `${district} - ${city}` : city;
+  const url = areaUrl(city, district, categoryType);
+  const pageTitle = buildPageTitle({ city, district, categoryDefinition });
 
   const sampleCategories = [...new Set(listings.map((item) => cleanText(item.category, 30)).filter(Boolean))]
     .slice(0, 4);
 
   const description = cleanText(
-    district
-      ? `تصفح أحدث عقارات ${district} في ${city} على طابو أخضر: ${sampleCategories.join("، ") || "شقق ومنازل ومحلات"} للبيع والإيجار مع الأسعار والمساحات والتفاصيل.`
-      : `تصفح أحدث عقارات ${city} على طابو أخضر: ${sampleCategories.join("، ") || "شقق ومنازل ومحلات"} للبيع والإيجار مع الأسعار والمساحات والتفاصيل.`,
+    categoryDefinition
+      ? `تصفح ${categoryDefinition.titlePlural} ${categoryDefinition.action} في ${district ? `${district} ${city}` : city} على طابو أخضر مع السعر والمساحة والموقع والتفاصيل ووسائل التواصل.`
+      : district
+        ? `تصفح أحدث عقارات ${district} في ${city} على طابو أخضر: ${sampleCategories.join("، ") || "شقق ومنازل ومحلات"} للبيع والإيجار مع الأسعار والمساحات والتفاصيل.`
+        : `تصفح أحدث عقارات ${city} على طابو أخضر: ${sampleCategories.join("، ") || "شقق ومنازل ومحلات"} للبيع والإيجار مع الأسعار والمساحات والتفاصيل.`,
     160
   );
 
@@ -245,7 +291,9 @@ function buildAreaSeo({ city, district, listings }) {
         },
         about: {
           "@type": "Place",
-          name: locationText,
+          name: categoryDefinition
+            ? `${categoryDefinition.titlePlural} ${categoryDefinition.action} في ${locationText}`
+            : locationText,
         },
       },
       ...(itemList.length
@@ -253,7 +301,9 @@ function buildAreaSeo({ city, district, listings }) {
             {
               "@type": "ItemList",
               "@id": `${url}#listings`,
-              name: `أحدث العقارات في ${areaName}`,
+              name: categoryDefinition
+                ? `${categoryDefinition.titlePlural} ${categoryDefinition.action} في ${areaName}`
+                : `أحدث العقارات في ${areaName}`,
               numberOfItems: itemList.length,
               itemListElement: itemList,
             },
@@ -270,9 +320,11 @@ function buildAreaSeo({ city, district, listings }) {
     })
     .join("\n");
 
+  const h1 = pageTitle.replace(" | طابو أخضر", "").replace(" - طابو أخضر", "");
+
   const fallbackContent = `
 <section id="seo-area-content" style="max-width:980px;margin:24px auto;padding:16px;font-family:Tajawal,Arial,sans-serif;line-height:1.9;direction:rtl">
-  <h1>${escapeHtml(pageTitle.replace(" - طابو أخضر", ""))}</h1>
+  <h1>${escapeHtml(h1)}</h1>
   <p>${escapeHtml(description)}</p>
   ${listingLinks ? `<h2>أحدث الإعلانات في ${escapeHtml(areaName)}</h2><ul>${listingLinks}</ul>` : ""}
 </section>`;
@@ -293,24 +345,24 @@ function buildAreaSeo({ city, district, listings }) {
 <meta name="twitter:description" content="${escapeHtml(description)}">
 
 <script type="application/ld+json">${safeJsonLd(jsonLd)}</script>
-`;
+ `;
 
-  return { seo, fallbackContent, count };
+  return { seo, fallbackContent };
 }
 
-function buildNoIndexSeo(city, district) {
-  const url = city ? areaUrl(city, district) : `${SITE_URL}/real-estate`;
+function buildNoIndexSeo(city, district, categoryType = "") {
+  const url = city ? areaUrl(city, district, categoryType) : `${SITE_URL}/real-estate`;
   return `
 <title>المنطقة غير متاحة - طابو أخضر</title>
 <meta name="robots" content="noindex, follow">
 <link rel="canonical" href="${escapeHtml(url)}">
-`;
+ `;
 }
 
 export default async function handler(req, res) {
-  const { city, district } = getAreaFromRequest(req);
+  const { city, district, categoryType, categoryDefinition } = getAreaFromRequest(req);
 
-  if (!city) {
+  if (!city || (categoryType && !categoryDefinition)) {
     res.statusCode = 400;
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("Cache-Control", "no-store");
@@ -321,11 +373,11 @@ export default async function handler(req, res) {
   try {
     const htmlTemplate = await loadIndexHtml();
     const cleanedHtml = removeOldSeo(htmlTemplate);
-    const listings = await fetchAreaListings(city, district);
+    const listings = await fetchAreaListings(city, district, categoryDefinition);
 
     // إذا كان الرابط لمنطقة لا يوجد فيها إعلانات فعالة، لا نطلب من Google فهرسته.
     if (listings.length < MIN_AREA_LISTINGS) {
-      const noIndexSeo = buildNoIndexSeo(city, district);
+      const noIndexSeo = buildNoIndexSeo(city, district, categoryType);
       const html = cleanedHtml.replace("</head>", `${noIndexSeo}\n</head>`);
 
       res.statusCode = 404;
@@ -335,7 +387,7 @@ export default async function handler(req, res) {
       return;
     }
 
-    const { seo, fallbackContent } = buildAreaSeo({ city, district, listings });
+    const { seo, fallbackContent } = buildAreaSeo({ city, district, categoryType, categoryDefinition, listings });
     let html = cleanedHtml.replace("</head>", `${seo}\n</head>`);
     html = html.replace("</body>", `${fallbackContent}\n</body>`);
 
@@ -347,7 +399,7 @@ export default async function handler(req, res) {
     console.error("area-page SEO error:", error);
 
     const htmlTemplate = await loadIndexHtml().catch(() => "");
-    const noIndexSeo = buildNoIndexSeo(city, district);
+    const noIndexSeo = buildNoIndexSeo(city, district, categoryType);
     const html = removeOldSeo(htmlTemplate || "").replace("</head>", `${noIndexSeo}\n</head>`);
 
     res.statusCode = 503;
