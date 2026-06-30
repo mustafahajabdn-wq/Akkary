@@ -11,6 +11,7 @@ import { getCurrentUserId } from "../services/authService.js";
 import { findSavedSearchByQuery, insertSavedSearch } from "../services/savedSearchService.js";
 import { S, mergeStyles } from "../../shared/styles/primitives.js";
 import { trackSearch } from "../../shared/services/metaPixel.js";
+import { getCategoryTypeQueryText } from "../../shared/seo/categoryTypeSlugs.js";
 
 // ══════════════════════════════════════════════════════════════
 //  ثوابت وخرائط
@@ -123,9 +124,11 @@ function buildAreaQueryFromPath(pathname = "") {
 
   const city = decodeAreaSlug(parts[1]);
   const district = decodeAreaSlug(parts[2]);
+  const categoryQuery = getCategoryTypeQueryText(parts[3]);
 
   if (!city) return "";
-  return district ? `عقارات في ${district} ${city}` : `عقارات في ${city}`;
+  const locationText = district ? `${district} ${city}` : city;
+  return categoryQuery ? `${categoryQuery} في ${locationText}` : district ? `عقارات في ${locationText}` : `عقارات في ${city}`;
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -175,248 +178,91 @@ function extractArea(text) {
     max: null,
     exact: null
   };
-  m = n.match(new RegExp(`(?:اقل من|أقل من|حتى)\\s*(\\d+)\\s*${unit}`));
+  m = n.match(new RegExp(`(?:اقل من|أقل من|تحت|حتى)\\s*(\\d+)\\s*${unit}`));
   if (m) return {
     min: null,
     max: +m[1],
     exact: null
   };
-  for (const p of [/(\d+)\s*متر مربع/, /(\d+)\s*م2/, /مساح[ه\s]+(\d+)/, /(\d+)\s*متر/, /(\d+)\s*م(?=\s|$)/, /(?:صافي|اجمالي|إجمالي)\s*(\d+)/, /(\d+)\s*(?:صافي|اجمالي|إجمالي)/]) {
-    const r = n.match(p);
-    if (r) {
-      const v = +(r[1] || r[2]);
-      return {
-        min: v,
-        max: v,
-        exact: v
-      };
-    }
-  }
-  return {
+  m = n.match(new RegExp(`(\\d+)\\s*${unit}`));
+  if (m) return {
     min: null,
     max: null,
-    exact: null
+    exact: +m[1]
   };
+  return { min: null, max: null, exact: null };
 }
 function extractRooms(text) {
   const n = norm(text);
-  let m = n.match(/بين\s*(\d+)\s*(?:و|الى|إلى|حتى)\s*(\d+)\s*(?:غرف|غرفه|غرفة)\b/);
-  if (m) return {
-    min: +m[1],
-    max: +m[2],
-    exact: null
-  };
-  m = n.match(/(?:اكثر من|أكثر من|على الاقل|على الأقل|فوق)\s*(\d+)\s*(?:غرف|غرفه|غرفة)\b/);
-  if (m) return {
-    min: +m[1],
-    max: null,
-    exact: null
-  };
-  m = n.match(/(?:اقل من|أقل من|حتى)\s*(\d+)\s*(?:غرف|غرفه|غرفة)\b/);
-  if (m) return {
-    min: null,
-    max: +m[1],
-    exact: null
-  };
-  for (const p of [/(\d+)\s*غرف نوم/, /(\d+)\s*غرف/, /(\d+)\s*اوض/, /(\d+)\s*غرفه/, /(\d+)\s*غرفة/]) {
-    const r = n.match(p);
-    if (r) {
-      const v = +r[1];
-      return {
-        min: v,
-        max: v,
-        exact: v
-      };
-    }
-  }
-  const words = {
-    "خمس": 5,
-    "5": 5,
-    "اربع": 4,
-    "أربع": 4,
-    "4": 4,
-    "ثلاث": 3,
-    "3": 3,
-    "غرفتين": 2,
-    "غرفتان": 2,
-    "2": 2,
-    "واحده": 1,
-    "واحدة": 1,
-    "1": 1
-  };
-  for (const [w, v] of Object.entries(words)) {
-    if (n.includes(w + " غرف") || n.includes(w + " غرفه")) return {
-      min: v,
-      max: v,
-      exact: v
-    };
-  }
-  return {
-    min: null,
-    max: null,
-    exact: null
-  };
+  let m = n.match(/(?:بين\s*)?(\d+)\s*(?:و|الى|إلى|حتى)\s*(\d+)\s*(?:غرف|غرفة|اوض|اوضه|اوضة)/);
+  if (m) return { min: +m[1], max: +m[2], exact: null };
+  m = n.match(/(?:اكثر من|أكثر من|فوق|على الاقل|على الأقل)\s*(\d+)\s*(?:غرف|غرفة|اوض|اوضه|اوضة)/);
+  if (m) return { min: +m[1], max: null, exact: null };
+  m = n.match(/(?:اقل من|أقل من|تحت|حتى)\s*(\d+)\s*(?:غرف|غرفة|اوض|اوضه|اوضة)/);
+  if (m) return { min: null, max: +m[1], exact: null };
+  m = n.match(/(\d+)\s*(?:غرف|غرفة|اوض|اوضه|اوضة)/);
+  if (m) return { min: null, max: null, exact: +m[1] };
+  return { min: null, max: null, exact: null };
 }
 function extractBaths(text) {
-  const n = norm(text);
-  for (const p of [/(\d+)\s*حمامات/, /(\d+)\s*حمام/]) {
-    const m = n.match(p);
-    if (m) return +m[1];
-  }
-  if (n.includes("حمامين")) return 2;
-  return null;
+  const m = norm(text).match(/(\d+)\s*(?:حمام|حمامات|دورات مياه)/);
+  return m ? +m[1] : null;
 }
 function extractFloor(text) {
   const n = norm(text);
-  for (const p of [/الطابق\s*(\d+)/, /طابق\s*(\d+)/]) {
-    const m = n.match(p);
-    if (m) return +m[1];
-  }
-  if (n.includes("ارضي") || n.includes("الارضي")) return 0;
-  const fw = {
-    1: "اول",
-    2: "ثاني",
-    3: "ثالث",
-    4: "رابع",
-    5: "خامس",
-    6: "سادس",
-    7: "سابع",
-    8: "ثامن",
-    9: "تاسع",
-    10: "عاشر"
-  };
-  for (const [num, word] of Object.entries(fw)) {
-    if (n.includes("طابق ال" + word) || n.includes("الطابق ال" + word) || n.includes("طابق " + word)) return +num;
-  }
-  if (n.includes("اخير") || n.includes("الاخير")) return 99;
+  if (/(?:طابق|الدور)\s*(?:ارضي|الأرضي)/.test(n)) return 0;
+  const words = { اول: 1, الاول: 1, تاني: 2, ثاني: 2, الثاني: 2, تالت: 3, ثالث: 3, الثالث: 3, رابع: 4, الخامس: 5, خامس: 5, سادس: 6, سابع: 7, ثامن: 8, تاسع: 9, عاشر: 10 };
+  for (const [w, v] of Object.entries(words)) if (n.includes(`طابق ${w}`) || n.includes(`الدور ${w}`)) return v;
+  const m = n.match(/(?:طابق|الدور)\s*(\d+)/);
+  if (m) return +m[1];
+  if (/(?:اخر طابق|آخر طابق|الاخير|الأخير)/.test(n)) return 99; // رمز الطابق الأخير
   return null;
+}
+function parseNumberWithUnit(s) {
+  const n = norm(s);
+  let m = n.match(/(\d+(?:\.\d+)?)\s*(?:مليار|مليارات)/);
+  if (m) return +m[1] * 1_000_000_000;
+  m = n.match(/(\d+(?:\.\d+)?)\s*(?:مليون|ملايين|م)/);
+  if (m) return +m[1] * 1_000_000;
+  m = n.match(/(\d+(?:\.\d+)?)\s*(?:الف|ألف|k|ك)/);
+  if (m) return +m[1] * 1000;
+  m = n.match(/\d{4,}/);
+  return m ? +m[0] : null;
 }
 function extractPrice(text) {
   const n = norm(text);
-  const amount = (v, suf = "") => {
-    const x = +v;
-    if (!x) return null;
-    if (suf.includes("مليون")) return x * 1_000_000;
-    if (suf.includes("الف") || suf.includes("ألف") || suf === "k") return x * 1_000;
-    return x;
-  };
-  let m = n.match(/بين\s*(\d+)\s*(مليون|الف|ألف|k)?\s*(?:و|الى|إلى|حتى)\s*(\d+)\s*(مليون|الف|ألف|k)?/);
-  if (m) return {
-    min: amount(m[1], m[2] || ""),
-    max: amount(m[3], m[4] || ""),
-    exact: null
-  };
-  m = n.match(/(?:اكثر من|أكثر من|فوق|ابتداء من|من)\s*(\d+)\s*(مليون|الف|ألف|k)?/);
-  if (m) return {
-    min: amount(m[1], m[2] || ""),
-    max: null,
-    exact: null
-  };
-  m = n.match(/(?:اقل من|أقل من|حتى)\s*(\d+)\s*(مليون|الف|ألف|k)?/);
-  if (m) return {
-    min: null,
-    max: amount(m[1], m[2] || ""),
-    exact: null
-  };
-  const patterns = [{
-    re: /(\d[\d,]*)\s*مليون دولار/,
-    mul: 1_000_000
-  }, {
-    re: /(\d[\d,]*)\s*مليون/,
-    mul: 1_000_000
-  }, {
-    re: /(?:^|\s)(مليون)\s*(?:دولار)?/,
-    mul: 1_000_000,
-    noNum: true
-  }, {
-    re: /(\d[\d,]*)\s*الف دولار/,
-    mul: 1_000
-  }, {
-    re: /(\d[\d,]*)\s*الف/,
-    mul: 1_000
-  }, {
-    re: /(\d[\d,]*)\s*k\b/,
-    mul: 1_000
-  }, {
-    re: /\$\s*(\d[\d,]*)/,
-    mul: 1
-  }, {
-    re: /(\d[\d,]*)\s*دولار/,
-    mul: 1
-  }, {
-    re: /السعر\s*(\d[\d,]*)/,
-    mul: 1
-  }, {
-    re: /مطلوب\s*(\d[\d,]*)/,
-    mul: 1
-  }];
-  for (const {
-    re,
-    mul,
-    noNum
-  } of patterns) {
-    const r = n.match(re);
-    if (r) {
-      const v = noNum ? mul : +r[1].replace(/,/g, "") * mul;
-      return {
-        min: v,
-        max: v,
-        exact: v
-      };
-    }
-  }
-  return {
-    min: null,
-    max: null,
-    exact: null
-  };
+  let m = n.match(/بين\s*([^\s]+(?:\s*(?:مليون|مليار|الف|ألف|k|ك|م))?)\s*(?:و|الى|إلى|حتى)\s*([^\s]+(?:\s*(?:مليون|مليار|الف|ألف|k|ك|م))?)/);
+  if (m) return { min: parseNumberWithUnit(m[1]), max: parseNumberWithUnit(m[2]), exact: null };
+  m = n.match(/(?:اقل من|أقل من|تحت|حتى)\s*([^\s]+(?:\s*(?:مليون|مليار|الف|ألف|k|ك|م))?)/);
+  if (m) return { min: null, max: parseNumberWithUnit(m[1]), exact: null };
+  m = n.match(/(?:اكثر من|أكثر من|فوق|على الاقل|على الأقل)\s*([^\s]+(?:\s*(?:مليون|مليار|الف|ألف|k|ك|م))?)/);
+  if (m) return { min: parseNumberWithUnit(m[1]), max: null, exact: null };
+  const val = parseNumberWithUnit(text);
+  return { min: null, max: null, exact: val };
 }
-
-// استخراج الميزات مع دعم النفي
-function extractFeatures(text) {
-  const n = norm(text);
-  const included = {};
-  const excluded = {};
-  for (const [key, phrases] of Object.entries(FEATURES)) {
-    let inc = false,
-      exc = false;
-    for (const phrase of phrases) {
-      const p = norm(phrase);
-      if (!n.includes(p)) continue;
-      // تحقق من النفي
-      const isNeg = NEG_PREFIXES.some(neg => {
-        const nn = norm(neg);
-        const idx = n.indexOf(p);
-        const before = n.slice(Math.max(0, idx - nn.length - 2), idx);
-        return before.includes(nn);
-      });
-      if (isNeg) exc = true;else inc = true;
-    }
-    if (exc) excluded[key] = true;else if (inc) included[key] = true;
-  }
-  return {
-    included,
-    excluded
-  };
+function stripIntent(text) {
+  let x = text;
+  INTENT_MARKERS.forEach(p => { x = x.replace(new RegExp(p, "gi"), " "); });
+  return x.trim();
 }
-
-// استخراج OR للفئات ("شقة أو فيلا")
 function extractCategories(text) {
   const n = norm(text);
-  const found = [];
-  for (const [cat, synonyms] of Object.entries(CATEGORIES)) {
-    if (synonyms.some(s => n.includes(norm(s)))) found.push(cat);
-  }
-  return found.length > 0 ? found : null;
+  return Object.entries(CATEGORIES).filter(([, syns]) => has(n, syns)).map(([cat]) => cat);
 }
-
-// كشف نية البحث — يزيل عبارات النية قبل التحليل
-function stripIntent(text) {
-  let t = text;
-  for (const marker of INTENT_MARKERS) {
-    t = t.replace(new RegExp(marker, "g"), "");
+function extractFeatures(text) {
+  const n = norm(text);
+  const inc = {}, exc = {};
+  for (const [key, syns] of Object.entries(FEATURES)) {
+    syns.forEach(s => {
+      const sn = norm(s);
+      if (!sn || !n.includes(sn)) return;
+      const idx = n.indexOf(sn);
+      const before = n.slice(Math.max(0, idx - 18), idx).trim();
+      const neg = NEG_PREFIXES.some(p => before.endsWith(norm(p)) || before.includes(norm(p) + " "));
+      if (neg) exc[key] = true; else inc[key] = true;
+    });
   }
-  return t.trim();
+  return { included: inc, excluded: exc };
 }
 
 // تصحيح المدينة
@@ -702,198 +548,77 @@ function score(listing, pq) {
   if (pq.features?.cond_rented && has(condN, FEATURES.cond_rented)) s += 10;
   if (pq.features?.finish_super && has(finN, FEATURES.finish_super)) s += 10;
   if (pq.features?.finish_deluxe && has(finN, FEATURES.finish_deluxe)) s += 10;
-  if (pq.features?.finish_luxury && has(finN, FEATURES.finish_luxury)) s += 8;
-  if (pq.features?.finish_first && has(finN, FEATURES.finish_first)) s += 8;
-  if (pq.features?.finish_modern && has(finN, FEATURES.finish_modern)) s += 6;
-  if (pq.features?.finish_normal && has(finN, FEATURES.finish_normal)) s += 4;
-  if (pq.features?.kitchen_closed && has(blob, FEATURES.kitchen_closed)) s += 8;
-  if (pq.features?.kitchen_open && has(blob, FEATURES.kitchen_open)) s += 8;
+  if (pq.features?.finish_luxury && has(finN, FEATURES.finish_luxury)) s += 10;
+  if (pq.features?.finish_first && has(finN, FEATURES.finish_first)) s += 10;
+  if (pq.features?.finish_modern && has(finN, FEATURES.finish_modern)) s += 10;
+  if (pq.features?.finish_normal && has(finN, FEATURES.finish_normal)) s += 10;
+  if (pq.features?.kitchen_closed && has(blob, FEATURES.kitchen_closed)) s += 6;
+  if (pq.features?.kitchen_open && has(blob, FEATURES.kitchen_open)) s += 6;
   if (pq.features?.kitchen_any && has(blob, FEATURES.kitchen_any)) s += 4;
-  if (pq.features?.dir_east && has(blob, FEATURES.dir_east)) s += 8;
-  if (pq.features?.dir_west && has(blob, FEATURES.dir_west)) s += 8;
-  if (pq.features?.dir_north && has(blob, FEATURES.dir_north)) s += 8;
-  if (pq.features?.dir_south && has(blob, FEATURES.dir_south)) s += 8;
-  if (pq.features?.multi_facade && has(blob, FEATURES.multi_facade)) s += 8;
-  if (pq.features?.view_open && has(blob, FEATURES.view_open)) s += 8;
+  if (pq.features?.dir_east && has(blob, FEATURES.dir_east)) s += 6;
+  if (pq.features?.dir_west && has(blob, FEATURES.dir_west)) s += 6;
+  if (pq.features?.dir_north && has(blob, FEATURES.dir_north)) s += 6;
+  if (pq.features?.dir_south && has(blob, FEATURES.dir_south)) s += 6;
+  if (pq.features?.multi_facade && has(blob, FEATURES.multi_facade)) s += 6;
+  if (pq.features?.view_open && has(blob, FEATURES.view_open)) s += 5;
   if (pq.features?.own_green && ownN.includes("اخضر")) s += 12;
-  if (pq.features?.own_legal && ownN.includes("نظامي")) s += 12;
-  if (pq.features?.own_notary && ownN.includes("كاتب")) s += 12;
-  if (pq.features?.own_court && ownN.includes("محكم")) s += 12;
-  if (pq.features?.own_share && has(ownN, FEATURES.own_share)) s += 10;
+  if (pq.features?.own_legal && has(ownN, FEATURES.own_legal)) s += 8;
+  if (pq.features?.own_notary && has(ownN, FEATURES.own_notary)) s += 8;
+  if (pq.features?.own_court && has(ownN, FEATURES.own_court)) s += 8;
+  if (pq.features?.own_share && has(ownN, FEATURES.own_share)) s += 5;
+  if (pq.features?.price_negotiable && has(blob, FEATURES.price_negotiable)) s += 4;
 
-  // رقم هاتف جزئي
-  if (pq.phoneQuery) {
-    const ph = String(listing.phone || "");
-    if (ph.includes(pq.phoneQuery)) s += 50;
-  }
-
-  // كلمات حرة
-  for (const t of pq.tokens || []) {
-    if (t.length < 2) continue;
-    if (blob.includes(t)) s += 4;
-  }
+  // كلمات حرة في العنوان/الوصف
+  const tokens = pq.tokens.filter(t => t.length > 2);
+  tokens.forEach(t => {
+    if (descT.includes(t)) s += 2;
+    else if (blob.includes(t)) s += 1;
+  });
   return s;
 }
-
-// ══════════════════════════════════════════════════════════════
-//  بناء الـ tags للعرض
-// ══════════════════════════════════════════════════════════════
-
-const FEATURE_LABELS = {
-  elevator: "مصعد",
-  parking: "كراج",
-  pool: "مسبح",
-  solar: "طاقة شمسية",
-  compound: "مجمع سكني",
-  intercom: "انترفون",
-  security: "حراسة",
-  balcony: "بلكون",
-  terrace: "تراس",
-  furnished_yes: "مفروش",
-  furnished_no: "غير مفروش",
-  heating_central: "تدفئة مركزية",
-  heating_diesel: "ديزل",
-  heating_gas: "غاز",
-  heating_electric: "تدفئة كهربائية",
-  cond_ready: "جاهز للسكن",
-  cond_shell: "على العضم",
-  cond_construction: "قيد الإنشاء",
-  cond_rented: "مؤجر",
-  finish_super: "سوبر ديلوكس",
-  finish_deluxe: "ديلوكس",
-  finish_luxury: "فاخر",
-  finish_first: "نخب أول",
-  finish_modern: "حديث",
-  finish_normal: "عادي",
-  kitchen_closed: "مطبخ مغلق",
-  kitchen_open: "مطبخ أمريكي",
-  kitchen_any: "مطبخ",
-  dir_east: "شرقي",
-  dir_west: "غربي",
-  dir_north: "شمالي",
-  dir_south: "جنوبي",
-  multi_facade: "واجهات متعددة",
-  view_open: "إطلالة مفتوحة",
-  own_green: "طابو أخضر",
-  own_legal: "طابو نظامي",
-  own_notary: "كاتب عدل",
-  own_court: "حكم محكمة",
-  own_share: "أسهم",
-  price_negotiable: "قابل للتفاوض"
-};
+function rankSearchRows(rows, pq) {
+  return (rows || []).filter(l => hardPass(l, pq)).map(l => ({ ...l, priceNum: Number(l.price || 0), _score: score(l, pq) })).sort((a, b) => b._score - a._score || new Date(b.created_at) - new Date(a.created_at));
+}
+function mergeUniqueResults(current = [], next = []) {
+  const seen = new Set(current.map(item => item?.id).filter(Boolean));
+  const merged = [...current];
+  next.forEach(item => {
+    if (!item?.id || seen.has(item.id)) return;
+    seen.add(item.id);
+    merged.push(item);
+  });
+  return merged;
+}
 function buildTags(pq) {
-  const tags = [];
-  if (pq.categories?.length > 1) tags.push("🏠 " + pq.categories.join(" أو "));else if (pq.categories?.length === 1) tags.push("🏠 " + pq.categories[0]);
-  if (pq.listingType) tags.push("🏷️ " + (pq.listingType === "sell" ? "للبيع" : "للإيجار"));
-  if (pq.city) tags.push("📍 " + pq.city);
-  if (pq.district) tags.push("📌 " + pq.district);
-  const {
-    area,
-    rooms,
-    price
-  } = pq;
-  if (area.exact != null) tags.push(`📐 ${area.exact} م²`);else if (area.min != null && area.max != null) tags.push(`📐 ${area.min}–${area.max} م²`);else if (area.min != null) tags.push(`📐 > ${area.min} م²`);else if (area.max != null) tags.push(`📐 < ${area.max} م²`);
-  if (rooms.exact != null) tags.push(`🛏️ ${rooms.exact} غرف`);else if (rooms.min != null && rooms.max != null) tags.push(`🛏️ ${rooms.min}–${rooms.max} غرف`);
-  if (pq.baths) tags.push(`🚿 ${pq.baths} حمامات`);
-  if (pq.floor != null) tags.push(`🏢 ${pq.floor === 0 ? "أرضي" : pq.floor === 99 ? "أخير" : "طابق " + pq.floor}`);
-  if (price.exact != null) tags.push(`💰 ~${price.exact.toLocaleString()} $`);else if (price.min != null && price.max != null) tags.push(`💰 ${price.min.toLocaleString()}–${price.max.toLocaleString()} $`);else if (price.min != null) tags.push(`💰 > ${price.min.toLocaleString()} $`);else if (price.max != null) tags.push(`💰 < ${price.max.toLocaleString()} $`);
-  if (pq.phoneQuery) tags.push(`📞 ${pq.phoneQuery}`);
-  for (const [k, label] of Object.entries(FEATURE_LABELS)) {
-    if (pq.features?.[k]) tags.push("✅ " + label);
-    if (pq.excludedFeatures?.[k]) tags.push("🚫 " + label);
-  }
-  return tags;
+  const arr = [];
+  pq.categories?.forEach(cat => arr.push(cat));
+  if (pq.listingType) arr.push(pq.listingType === "sell" ? "للبيع" : "للإيجار");
+  if (pq.city) arr.push(pq.city);
+  if (pq.district) arr.push(pq.district);
+  if (pq.area.exact) arr.push(pq.area.exact + " م²");
+  else if (pq.area.min || pq.area.max) arr.push("مساحة " + (pq.area.min || "0") + "—" + (pq.area.max || "∞"));
+  if (pq.rooms.exact) arr.push(pq.rooms.exact + " غرف");
+  if (pq.floor != null) arr.push(pq.floor === 0 ? "أرضي" : pq.floor === 99 ? "آخر طابق" : "طابق " + pq.floor);
+  Object.keys(pq.features || {}).forEach(k => arr.push(k));
+  Object.keys(pq.excludedFeatures || {}).forEach(k => arr.push("بدون " + k));
+  return arr;
 }
 
-// ══════════════════════════════════════════════════════════════
-//  تحويل نتيجة Supabase
-// ══════════════════════════════════════════════════════════════
-
-function mapListing(row) {
-  return {
-    ...row,
-    seller: row.profiles?.name || "مستخدم",
-    verified: row.profiles?.verified || false,
-    sellerId: row.user_id,
-    sellerName: row.profiles?.name || "",
-    sellerAccountType: row.profiles?.account_type || "individual",
-    sellerPhone: row.profiles?.phone || "",
-    sellerInit: (row.profiles?.name || "م")[0],
-    accountType: row.profiles?.account_type || "individual",
-    photo: row.listing_images?.find(i => i.is_main)?.url || row.listing_images?.[0]?.url || null,
-    images: (row.listing_images || []).map(i => i.url),
-    desc: row.description || "",
-    priceNum: parseFloat(String(row.price || "0").replace(/,/g, "")) || 0
-  };
-}
-
-// ══════════════════════════════════════════════════════════════
-//  threshold ذكي
-// ══════════════════════════════════════════════════════════════
-
-function minScore(pq) {
-  // كلما كانت الاستعلام أكثر تحديداً، نرفع العتبة
-  let specificity = 0;
-  if (pq.categories?.length) specificity++;
-  if (pq.listingType) specificity++;
-  if (pq.city) specificity++;
-  if (pq.district) specificity++;
-  if (pq.area.min != null || pq.area.max != null) specificity++;
-  if (pq.rooms.min != null || pq.rooms.max != null) specificity++;
-  if (Object.keys(pq.features || {}).length) specificity++;
-  // استعلام عام جداً → عتبة صفر (نعرض كل ما مر hardPass)
-  if (specificity <= 1) return 0;
-  // استعلام متوسط → عتبة 4
-  if (specificity <= 3) return 4;
-  // استعلام محدد → عتبة 8
-  return 8;
-}
-
-// localStorage لآخر بحث
-const LAST_SEARCH_KEY = "tabou_last_search";
-let searchNoticeTimer = null;
+// تخزين آخر بحث
+const LS_KEY = "aqari_last_search";
 function saveLastSearch(q) {
-  try {
-    localStorage.setItem(LAST_SEARCH_KEY, q);
-  } catch {}
+  try { localStorage.setItem(LS_KEY, q); } catch {}
 }
 function loadLastSearch() {
-  try {
-    return localStorage.getItem(LAST_SEARCH_KEY) || "";
-  } catch {
-    return "";
-  }
+  try { return localStorage.getItem(LS_KEY) || ""; } catch { return ""; }
 }
+let searchNoticeTimer = null;
 
-// ترتيب ودمج النتائج محلياً بعد تطبيق فلاتر الخادم
-function rankSearchRows(data, pq) {
-  const rows = data.map(mapListing);
-  const threshold = minScore(pq);
-
-  return rows
-    .filter(item => hardPass(item, pq))
-    .map(item => ({
-      ...item,
-      _score: score(item, pq)
-    }))
-    .filter(item => item._score >= threshold)
-    .sort((a, b) => b._score - a._score);
-}
-
-function mergeUniqueResults(oldRows, newRows) {
-  const seen = new Set(oldRows.map(item => item.id));
-
-  return [...oldRows, ...newRows.filter(item => !seen.has(item.id))]
-    .sort((a, b) => b._score - a._score);
-}
-
-// ══════════════════════════════════════════════════════════════
-//  المكوّن
-// ══════════════════════════════════════════════════════════════
-
-function SearchPage({
-  openDetail,
+export default function SearchPage({
   setPage,
+  setDetail,
+  setDetailPrevPage,
+  openDetail,
   favs,
   toggleFav,
   DC
@@ -1078,7 +803,7 @@ function SearchPage({
     getAllDistrictNames().then(setAllDistricts);
   }, []);
 
-  // عند فتح صفحة منطقة من روابط SEO مثل /real-estate/ريف-دمشق/يلدا
+  // عند فتح صفحة منطقة من روابط SEO مثل /real-estate/ريف-دمشق/يلدا/apartments-sale
   // نحول الرابط إلى بحث جاهز داخل نفس صفحة البحث دون إنشاء صفحات React كثيرة.
   useEffect(() => {
     const autoQuery = buildAreaQueryFromPath(location.pathname);
@@ -1182,178 +907,99 @@ function SearchPage({
       setLoadingMore(false);
     }
   }
-  return <div style={sx.s1(DC)}>
 
-      <div style={S.primaryHero(C.primary)}>
+  async function handleSaveSearch() {
+    const text = query.trim();
+    if (!text || savingSearch) return;
+
+    setSavingSearch(true);
+
+    try {
+      const userId = await getCurrentUserId();
+      if (!userId) {
+        showNotice("سجّل الدخول أولاً لحفظ البحث", "error");
+        return;
+      }
+
+      const existing = await findSavedSearchByQuery(userId, text);
+      if (existing) {
+        showNotice("هذا البحث محفوظ مسبقاً", "ok");
+        return;
+      }
+
+      await insertSavedSearch({
+        user_id: userId,
+        query: text,
+        notif: true
+      });
+
+      showNotice("تم حفظ البحث والتنبيه", "ok");
+    } catch (err) {
+      console.error("save search error", err);
+      showNotice("تعذر حفظ البحث", "error");
+    } finally {
+      setSavingSearch(false);
+    }
+  }
+
+  const visibleResults = (results || []).slice(0, visibleCount);
+  const canLoadMore = Boolean(
+    results &&
+      (results.length > visibleCount || serverHasMore)
+  );
+
+  return (
+    <div style={sx.s1(DC)} dir="rtl">
+      <div style={{ background: C.primary, padding: "48px 16px 34px", position: "relative", overflow: "hidden" }}>
         <IslamicPattern opacity={0.1} color="#FFFFFF" />
-        <div style={sx.s2}>
-          <BackButton onPress={() => setPage("home")} />
-        </div>
-        <div style={S.relZ1}>
-          <div style={sx.s3}>بحث ذكي مجاني</div>
-          <div style={sx.s4(C)}>ابحث كما تتكلّم</div>
+        <div style={sx.s2}><BackButton onClick={() => setPage ? setPage("home") : window.history.back()} /></div>
+        <div style={{ position: "relative", zIndex: 1 }}>
+          <div style={sx.s3}>البحث الذكي</div>
+          <div style={sx.s4(C)}>ابحث بطريقتك</div>
           <div style={sx.s5(C)}>
-            <textarea value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), doSearch(query))} placeholder="مثال: شقة أو فيلا بين 150 و 250 متر بدون مصعد للبيع دمشق..." rows={2} style={sx.s6(C)} />
+            <textarea
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="مثال: شقة للبيع في ركن الدين 3 غرف طابو أخضر"
+              rows={2}
+              style={sx.s6(C)}
+              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); doSearch(query); } }}
+            />
             <div style={sx.s7}>
-              <span style={sx.s8(C)}>اضغط Enter أو الزر</span>
-              <button onClick={() => doSearch(query)} style={sx.s9(C)}>
-                بحث ←
-              </button>
+              <span style={sx.s8(C)}>{lastSearch ? "آخر بحث: " + lastSearch : "اكتب وصف العقار المطلوب"}</span>
+              <button onClick={() => doSearch(query)} style={sx.s9(C)} disabled={loading}>{loading ? "..." : "بحث"}</button>
             </div>
           </div>
         </div>
-        <Wave />
+        <Wave fill={DC.bg} />
       </div>
 
-      <div style={S.pad14}>
+      <div style={{ padding: 16 }}>
+        {lastSearch && !query && <button onClick={() => { setQuery(lastSearch); doSearch(lastSearch); }} style={sx.s10(C)}><span>🔁</span><span style={sx.s11}>إعادة آخر بحث</span><span style={sx.s12(C)}>{lastSearch}</span></button>}
 
-        {!results && !loading && lastSearch && <button onClick={() => {
-        setQuery(lastSearch);
-        doSearch(lastSearch);
-      }} style={sx.s10(C)}>
-            <span>🔍</span>
-            <span style={sx.s11}>
-              آخر بحث: {lastSearch}
-            </span>
-            <span style={sx.s12(C)}>إعادة</span>
-          </button>}
+        {notice && <div style={{ ...sx.s14(DC), color: notice.type === "error" ? "#B91C1C" : C.primary }}>{notice.text}</div>}
 
-        {!results && !loading && suggestions.map((s, i) => {
-        const sx = {
-          s1: DC => ({
-            width: "100%",
-            background: DC.white,
-            border: "1px solid " + DC.border,
-            borderRadius: 10,
-            padding: "11px 14px",
-            fontSize: 13,
-            color: DC.text,
-            fontFamily: "Tajawal, sans-serif",
-            cursor: "pointer",
-            textAlign: "right",
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            marginBottom: 8
-          }),
-          s2: C => ({
-            color: C.text3
-          })
-        };
-        return <button key={i} onClick={() => {
-          setQuery(s);
-          doSearch(s);
-        }} style={sx.s1(DC)}>
-            <span style={sx.s2(C)}>🔍</span>{s}
-          </button>;
-      })}
+        {!results && <div style={sx.s14(DC)}>
+          <div style={sx.s15(C)}>اقتراحات</div>
+          <div style={sx.s16}>{suggestions.map(s => <button key={s} onClick={() => { setQuery(s); doSearch(s); }} style={{ border: "1px solid " + DC.border, background: DC.white, color: DC.text2, borderRadius: 20, padding: "7px 10px", fontSize: 12, fontFamily: "inherit" }}>{s}</button>)}</div>
+        </div>}
 
-        {loading && <div style={sx.s13(C)}>
-            🔍 جارٍ التحليل...
-          </div>}
-
-        {notice && <div style={{
-        marginBottom: 10,
-        padding: "10px 12px",
-        borderRadius: 10,
-        fontSize: 13,
-        fontWeight: 700,
-        color: notice.type === "error" ? "#991B1B" : "#166534",
-        background: notice.type === "error" ? "#FEE2E2" : "#DCFCE7",
-        border: notice.type === "error" ? "1px solid #FCA5A5" : "1px solid #86EFAC"
-      }}>
-            {notice.text}
-          </div>}
-
-        {results && !loading && <>
-          {tags.length > 0 && <div style={sx.s14(DC)}>
-              <div style={sx.s15(C)}>فهمت من طلبك</div>
-              <div style={sx.s16}>
-                {tags.map((tag, i) => {
-              const sx = {
-                s1: (tag, C) => ({
-                  background: tag.startsWith("🚫") ? "#FEF2F2" : C.primary,
-                  color: tag.startsWith("🚫") ? "#B91C1C" : "white",
-                  border: tag.startsWith("🚫") ? "1px solid #FECACA" : "none",
-                  borderRadius: 20,
-                  padding: "3px 10px",
-                  fontSize: 11,
-                  fontWeight: 600
-                })
-              };
-              return <span key={i} style={sx.s1(tag, C)}>
-                    {tag}
-                  </span>;
-            })}
-              </div>
-            </div>}
-
+        {results && <>
           <div style={sx.s17}>
-            <span style={sx.s18(DC)}>{results.length} نتيجة</span>
-            <div style={S.gap8}>
-              <button style={sx.s19(C)} disabled={savingSearch} onClick={async () => {
-              if (savingSearch) return;
-
-              setSavingSearch(true);
-
-              try {
-                const myId = await getCurrentUserId();
-
-                if (!myId) {
-                  showNotice("يجب تسجيل الدخول أولاً", "error");
-                  return;
-                }
-
-                const existing = await findSavedSearchByQuery(myId, query);
-
-                if (existing) {
-                  showNotice("البحث محفوظ مسبقاً");
-                  return;
-                }
-
-                const {
-                  error: insertError
-                } = await insertSavedSearch(myId, query, true);
-
-                if (insertError) {
-                  showNotice("حدث خطأ أثناء حفظ البحث", "error");
-                  return;
-                }
-
-                showNotice("تم حفظ البحث بنجاح");
-              } finally {
-                setSavingSearch(false);
-              }
-            }}>
-                {savingSearch ? "جارٍ الحفظ..." : "🔔 حفظ البحث"}
-              </button>
-              <button onClick={() => {
-              setResults(null);
-              setQuery("");
-              setTags([]);
-              setParsedQuery(null);
-              setServerOffset(0);
-              setServerHasMore(false);
-              setNotice(null);
-              saveLastSearch("");
-            }} style={sx.s20(DC)}>
-                جديد
-              </button>
+            <div>
+              <div style={sx.s18(DC)}>{results.length ? `${results.length} نتيجة` : "لا توجد نتائج"}</div>
+              {tags.length > 0 && <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 6 }}>{tags.slice(0, 8).map(t => <span key={t} style={{ background: "#E8F4F0", color: C.primary, borderRadius: 12, padding: "3px 8px", fontSize: 10, fontWeight: 700 }}>{t}</span>)}</div>}
             </div>
+            {query && <button onClick={handleSaveSearch} disabled={savingSearch} style={sx.s19(C)}>{savingSearch ? "..." : "🔔 حفظ"}</button>}
           </div>
 
-          {results.slice(0, visibleCount).map(item => <ListingCard key={item.id} item={item} onPress={i => {
-          openDetail(i, "search");
-        }} favs={favs} toggleFav={toggleFav} DC={DC} />)}
+          {visibleResults.length > 0 ? visibleResults.map(item => <ListingCard key={item.id} item={item} favs={favs} toggleFav={toggleFav} onClick={() => { if (openDetail) openDetail(item, "search"); else { setDetail(item); setDetailPrevPage("search"); setPage("detail"); } }} />) : <div style={sx.s13(C)}>لم نجد إعلاناً مطابقاً. جرّب توسيع البحث أو حذف بعض الشروط.<div style={sx.s22}><button onClick={() => { setQuery(""); setResults(null); setTags([]); }} style={sx.s20(DC)}>بحث جديد</button></div></div>}
 
-          <LoadMoreButton hasMore={results.length > visibleCount || serverHasMore} loading={loadingMore} onPress={handleLoadMore} />
-
-          {results.length === 0 && <div style={sx.s21(C)}>
-              <div style={S.font40}>🔍</div>
-              <div style={sx.s22}>لا توجد نتائج — جرب تغيير البحث</div>
-            </div>}
+          {canLoadMore && <LoadMoreButton loading={loadingMore} onClick={handleLoadMore} label="تحميل المزيد" />}
         </>}
+
+        {loading && <div style={sx.s21(C)}>⏳ جارٍ البحث...</div>}
       </div>
-    </div>;
+    </div>
+  );
 }
-export default SearchPage;
