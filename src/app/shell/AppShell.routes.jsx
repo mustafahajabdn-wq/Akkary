@@ -34,6 +34,10 @@ import { ProfileAdminMenuBoundary } from "./adminBoundary.jsx";
 import { legacyAdminRedirects } from "../../shared/constants/adminRoutes.js";
 import { fetchMyListings } from "../services/userService.js";
 
+function SearchRoute(props) {
+  return <SearchPage {...props} />;
+}
+
 export default function AppRoutes({
   common,
   user,
@@ -79,6 +83,15 @@ export default function AppRoutes({
   AdminApp,
   Protected,
 }) {
+  const searchProps = {
+    ...common,
+    setDetail,
+    setDetailPrevPage,
+    openDetail,
+    favs,
+    toggleFav,
+  };
+
   return (
     <Routes>
       <Route path="/home" element={<Navigate to="/" replace />} />
@@ -159,61 +172,10 @@ export default function AppRoutes({
         }
       />
 
-      <Route
-        path="/search"
-        element={
-          <SearchPage
-            {...common}
-            setDetail={setDetail}
-            setDetailPrevPage={setDetailPrevPage}
-            openDetail={openDetail}
-            favs={favs}
-            toggleFav={toggleFav}
-          />
-        }
-      />
-
-      <Route
-        path="/real-estate/:city"
-        element={
-          <SearchPage
-            {...common}
-            setDetail={setDetail}
-            setDetailPrevPage={setDetailPrevPage}
-            openDetail={openDetail}
-            favs={favs}
-            toggleFav={toggleFav}
-          />
-        }
-      />
-
-      <Route
-        path="/real-estate/:city/:district"
-        element={
-          <SearchPage
-            {...common}
-            setDetail={setDetail}
-            setDetailPrevPage={setDetailPrevPage}
-            openDetail={openDetail}
-            favs={favs}
-            toggleFav={toggleFav}
-          />
-        }
-      />
-
-      <Route
-        path="/real-estate/:city/:district/:categoryType"
-        element={
-          <SearchPage
-            {...common}
-            setDetail={setDetail}
-            setDetailPrevPage={setDetailPrevPage}
-            openDetail={openDetail}
-            favs={favs}
-            toggleFav={toggleFav}
-          />
-        }
-      />
+      <Route path="/search" element={<SearchRoute {...searchProps} />} />
+      <Route path="/real-estate/:city" element={<SearchRoute {...searchProps} />} />
+      <Route path="/real-estate/:city/:district" element={<SearchRoute {...searchProps} />} />
+      <Route path="/real-estate/:city/:district/:categoryType" element={<SearchRoute {...searchProps} />} />
 
       <Route path="/add-choice" element={<Protected element={<AddChoicePage setPage={setPage} user={user} />} />} />
 
@@ -408,7 +370,6 @@ export default function AppRoutes({
                 {...common}
                 dark={dark}
                 setDark={setDark}
-                setLang={setLang}
                 shamcash={shamcash}
                 setShamcash={updateShamcash}
                 setUser={setUser}
