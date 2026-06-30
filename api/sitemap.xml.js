@@ -1,8 +1,11 @@
 import { createClient } from "@supabase/supabase-js";
+import { getCategoryTypeSlug } from "../src/shared/seo/categoryTypeSlugs.js";
 
 const SITE_URL = "https://www.blabladar.com";
 const PAGE_SIZE = 1000;
 const MAX_SITEMAP_URLS = 50000;
+const MIN_AREA_COUNT = 3;
+const MIN_CATEGORY_AREA_COUNT = 1;
 
 const SUPABASE_URL =
   process.env.SUPABASE_URL ||
@@ -77,7 +80,7 @@ async function fetchActiveListings() {
     const to = from + PAGE_SIZE - 1;
     const { data, error } = await supabase
       .from("listings")
-      .select("id,created_at,updated_at,city,district")
+      .select("id,created_at,updated_at,city,district,category,type")
       .eq("status", "active")
       .eq("admin_status", "approved")
       .or(`expires_at.is.null,expires_at.gte.${today}`)
@@ -104,35 +107,56 @@ function getItemLastmod(item) {
   return item?.updated_at || item?.created_at || null;
 }
 
+function applyLastmod(current, itemLastmod) {
+  if (itemLastmod && (!current.lastmod || itemLastmod > current.lastmod)) {
+    current.lastmod = itemLastmod;
+  }
+}
+
 function buildAreaUrls(listings) {
   const areas = new Map();
+  const categoryAreas = new Map();
 
   for (const item of listings) {
     const city = String(item?.city || "").trim();
     const district = String(item?.district || "").trim();
+    const category = String(item?.category || "").trim();
+    const type = String(item?.type || "").trim();
+    const categoryTypeSlug = getCategoryTypeSlug(category, type);
 
     if (!city || !district) continue;
 
-    const key = `${city}||${district}`;
     const itemLastmod = getItemLastmod(item);
-    const current = areas.get(key) || {
+    const areaKey = `${city}||${district}`;
+    const area = areas.get(areaKey) || {
       city,
       district,
       count: 0,
       lastmod: itemLastmod,
     };
 
-    current.count += 1;
+    area.count += 1;
+    applyLastmod(area, itemLastmod);
+    areas.set(areaKey, area);
 
-    if (itemLastmod && (!current.lastmod || itemLastmod > current.lastmod)) {
-      current.lastmod = itemLastmod;
-    }
+    if (!categoryTypeSlug) continue;
 
-    areas.set(key, current);
+    const categoryAreaKey = `${city}||${district}||${categoryTypeSlug}`;
+    const categoryArea = categoryAreas.get(categoryAreaKey) || {
+      city,
+      district,
+      categoryTypeSlug,
+      count: 0,
+      lastmod: itemLastmod,
+    };
+
+    categoryArea.count += 1;
+    applyLastmod(categoryArea, itemLastmod);
+    categoryAreas.set(categoryAreaKey, categoryArea);
   }
 
-  return [...areas.values()]
-    .filter((area) => area.count >= 3)
+  const generalAreaUrls = [...areas.values()]
+    .filter((area) => area.count >= MIN_AREA_COUNT)
     .map((area) => {
       const citySlug = slugifyArabic(area.city);
       const districtSlug = slugifyArabic(area.district);
@@ -143,6 +167,21 @@ function buildAreaUrls(listings) {
         "0.9"
       );
     });
+
+  const categoryAreaUrls = [...categoryAreas.values()]
+    .filter((area) => area.count >= MIN_CATEGORY_AREA_COUNT)
+    .map((area) => {
+      const citySlug = slugifyArabic(area.city);
+      const districtSlug = slugifyArabic(area.district);
+
+      return sitemapUrl(
+        `${SITE_URL}/real-estate/${citySlug}/${districtSlug}/${area.categoryTypeSlug}`,
+        area.lastmod,
+        "0.9"
+      );
+    });
+
+  return [...generalAreaUrls, ...categoryAreaUrls];
 }
 
 export default async function handler(req, res) {
