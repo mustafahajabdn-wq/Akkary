@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { getCategoryTypeDefinition } from "./seoCategoryTypeSlugs.js";
+import { getAllCategoryTypeDefinitions, getCategoryTypeDefinition } from "./seoCategoryTypeSlugs.js";
 
 const SITE_URL = "https://www.blabladar.com";
 const MIN_AREA_LISTINGS = 1;
@@ -97,15 +97,21 @@ function getAreaFromRequest(req) {
   return { city, district, categoryType, categoryDefinition };
 }
 
-function categoryAliases(category = "") {
+function categoryAliases(category = "", categoryDefinition = null) {
+  if (Array.isArray(categoryDefinition?.dbCategories) && categoryDefinition.dbCategories.length) {
+    return categoryDefinition.dbCategories;
+  }
+
   const key = String(category || "").trim();
   const aliases = {
+    "شقة": ["شقة"],
     "بيت عربي": ["بيت عربي", "بيت", "منزل"],
     "محل تجاري": ["محل تجاري", "محل"],
     "فيلا": ["فيلا", "فيلا-مزرعة"],
     "مزرعة": ["مزرعة", "فيلا-مزرعة"],
     "أرض سكنية": ["أرض سكنية", "أرض"],
     "أرض زراعية": ["أرض زراعية"],
+    "مكتب": ["مكتب", "عيادة"],
   };
 
   return aliases[key] || [key].filter(Boolean);
@@ -152,7 +158,7 @@ async function fetchAreaListings(city, district, categoryDefinition = null) {
   }
 
   if (categoryDefinition?.category) {
-    const values = categoryAliases(categoryDefinition.category);
+    const values = categoryAliases(categoryDefinition.category, categoryDefinition);
     if (values.length === 1) {
       params.set("category", `eq.${values[0]}`);
     } else if (values.length > 1) {
@@ -232,6 +238,8 @@ function buildListingLine(listing) {
     listing?.category ? cleanText(listing.category, 30) : "",
     getListingArea(listing) ? `${getListingArea(listing)} م²` : "",
     listing?.rooms ? `${listing.rooms} غرف` : "",
+    listing?.floor !== null && listing?.floor !== undefined && listing?.floor !== "" ? `الطابق ${listing.floor}` : "",
+    listing?.ownership ? cleanText(listing.ownership, 40) : "",
     formatPrice(listing) ? `السعر ${formatPrice(listing)}` : "",
   ].filter(Boolean);
 
@@ -241,12 +249,107 @@ function buildListingLine(listing) {
 function buildPageTitle({ city, district, categoryDefinition }) {
   if (categoryDefinition) {
     const location = district ? `${district} ${city}` : city;
-    return `${categoryDefinition.titlePlural} ${categoryDefinition.action} في ${location} | طابو أخضر`;
+    return `${categoryDefinition.titlePlural} ${categoryDefinition.action} في ${location} | أسعار ومواصفات | طابو أخضر`;
   }
 
   return district
-    ? `عقارات للبيع والإيجار في ${district} - طابو أخضر`
-    : `عقارات للبيع والإيجار في ${city} - طابو أخضر`;
+    ? `عقارات للبيع والإيجار في ${district} ${city} | طابو أخضر`
+    : `عقارات للبيع والإيجار في ${city} | طابو أخضر`;
+}
+
+function getLocationText(city, district) {
+  return district ? `${district} ${city}` : city;
+}
+
+function getSeoTerms(categoryDefinition, locationText) {
+  const baseTerms = Array.isArray(categoryDefinition?.seoTerms) ? categoryDefinition.seoTerms : [];
+  return baseTerms
+    .map((term) => `${term} في ${locationText}`)
+    .slice(0, 14);
+}
+
+function buildDescription({ city, district, categoryDefinition, listings, sampleCategories }) {
+  const locationText = getLocationText(city, district);
+  const listingCountText = listings.length ? `، مع ${listings.length} إعلان فعال` : "";
+
+  if (categoryDefinition) {
+    const specs = (categoryDefinition.specTerms || ["السعر", "المساحة", "الموقع", "التفاصيل"])
+      .slice(0, 7)
+      .join("، ");
+
+    return cleanText(
+      `تصفح ${categoryDefinition.titlePlural} ${categoryDefinition.action} في ${locationText} على طابو أخضر: أسعار ومواصفات محدثة تشمل ${specs}${listingCountText}.`,
+      165
+    );
+  }
+
+  return cleanText(
+    district
+      ? `تصفح أحدث عقارات ${district} في ${city} على طابو أخضر: ${sampleCategories.join("، ") || "شقق ومنازل ومحلات"} للبيع والإيجار مع الأسعار والمساحات والتفاصيل.`
+      : `تصفح أحدث عقارات ${city} على طابو أخضر: ${sampleCategories.join("، ") || "شقق ومنازل ومحلات"} للبيع والإيجار مع الأسعار والمساحات والتفاصيل.`,
+    165
+  );
+}
+
+function buildIntroParagraph({ city, district, categoryDefinition, listings }) {
+  const locationText = getLocationText(city, district);
+
+  if (!categoryDefinition) {
+    return `هذه صفحة عقارات ${locationText} في طابو أخضر، وتعرض الإعلانات الفعالة مع السعر، المساحة، نوع العقار، ووسائل التواصل.`;
+  }
+
+  const specs = (categoryDefinition.specTerms || [])
+    .slice(0, 10)
+    .join("، ");
+
+  const terms = getSeoTerms(categoryDefinition, locationText).slice(0, 5).join("، ");
+
+  return [
+    `هذه صفحة ${categoryDefinition.titlePlural} ${categoryDefinition.action} في ${locationText}.`,
+    `تساعدك على مقارنة الأسعار والمواصفات مثل ${specs || "المساحة، السعر، الغرف، الطابق والملكية"}.`,
+    terms ? `وتغطي عبارات بحث شائعة مثل: ${terms}.` : "",
+    listings.length ? `يتم عرض أحدث الإعلانات الفعالة فقط، مع رابط مباشر لكل إعلان.` : "",
+  ].filter(Boolean).join(" ");
+}
+
+function buildRelatedLinks({ city, district, categoryType }) {
+  const current = String(categoryType || "").trim();
+  const cityName = cleanText(city, 60);
+  const districtName = cleanText(district, 80);
+
+  if (!cityName || !districtName) return "";
+
+  const links = getAllCategoryTypeDefinitions()
+    .filter((def) => def.slug !== current)
+    .slice(0, 10)
+    .map((def) => {
+      const href = areaUrl(cityName, districtName, def.slug);
+      return `<li><a href="${escapeHtml(href)}">${escapeHtml(`${def.titlePlural} ${def.action} في ${districtName} ${cityName}`)}</a></li>`;
+    })
+    .join("\n");
+
+  return links ? `<h2>روابط بحث قريبة</h2><ul>${links}</ul>` : "";
+}
+
+function buildSeoTermsBlock({ categoryDefinition, city, district }) {
+  if (!categoryDefinition) return "";
+
+  const locationText = getLocationText(city, district);
+  const terms = getSeoTerms(categoryDefinition, locationText);
+  const specs = Array.isArray(categoryDefinition.specTerms) ? categoryDefinition.specTerms : [];
+
+  const termsHtml = terms
+    .map((term) => `<li>${escapeHtml(term)}</li>`)
+    .join("\n");
+
+  const specsHtml = specs
+    .map((term) => `<li>${escapeHtml(term)}</li>`)
+    .join("\n");
+
+  return `
+  <h2>مصطلحات يبحث عنها المستخدمون</h2>
+  <ul>${termsHtml}</ul>
+  ${specsHtml ? `<h2>مواصفات مهمة للمقارنة</h2><ul>${specsHtml}</ul>` : ""}`;
 }
 
 function buildAreaSeo({ city, district, categoryType, categoryDefinition, listings }) {
@@ -258,14 +361,13 @@ function buildAreaSeo({ city, district, categoryType, categoryDefinition, listin
   const sampleCategories = [...new Set(listings.map((item) => cleanText(item.category, 30)).filter(Boolean))]
     .slice(0, 4);
 
-  const description = cleanText(
-    categoryDefinition
-      ? `تصفح ${categoryDefinition.titlePlural} ${categoryDefinition.action} في ${district ? `${district} ${city}` : city} على طابو أخضر مع السعر والمساحة والموقع والتفاصيل ووسائل التواصل.`
-      : district
-        ? `تصفح أحدث عقارات ${district} في ${city} على طابو أخضر: ${sampleCategories.join("، ") || "شقق ومنازل ومحلات"} للبيع والإيجار مع الأسعار والمساحات والتفاصيل.`
-        : `تصفح أحدث عقارات ${city} على طابو أخضر: ${sampleCategories.join("، ") || "شقق ومنازل ومحلات"} للبيع والإيجار مع الأسعار والمساحات والتفاصيل.`,
-    160
-  );
+  const description = buildDescription({
+    city,
+    district,
+    categoryDefinition,
+    listings,
+    sampleCategories,
+  });
 
   const itemList = listings.slice(0, 12).map((listing, index) => ({
     "@type": "ListItem",
@@ -273,6 +375,14 @@ function buildAreaSeo({ city, district, categoryType, categoryDefinition, listin
     url: `${SITE_URL}/listing/${listing.id}`,
     name: cleanText(listing.title || "إعلان عقاري", 90),
   }));
+
+  const breadcrumbItems = [
+    { name: "الرئيسية", url: SITE_URL },
+    { name: "العقارات", url: `${SITE_URL}/real-estate` },
+    city ? { name: city, url: areaUrl(city) } : null,
+    district ? { name: district, url: areaUrl(city, district) } : null,
+    categoryDefinition ? { name: `${categoryDefinition.titlePlural} ${categoryDefinition.action}`, url } : null,
+  ].filter(Boolean);
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -296,6 +406,16 @@ function buildAreaSeo({ city, district, categoryType, categoryDefinition, listin
             : locationText,
         },
       },
+      {
+        "@type": "BreadcrumbList",
+        "@id": `${url}#breadcrumbs`,
+        itemListElement: breadcrumbItems.map((item, index) => ({
+          "@type": "ListItem",
+          position: index + 1,
+          name: item.name,
+          item: item.url,
+        })),
+      },
       ...(itemList.length
         ? [
             {
@@ -313,20 +433,26 @@ function buildAreaSeo({ city, district, categoryType, categoryDefinition, listin
   };
 
   const listingLinks = listings
-    .slice(0, 8)
+    .slice(0, 10)
     .map((listing) => {
       const href = `${SITE_URL}/listing/${listing.id}`;
       return `<li><a href="${escapeHtml(href)}">${escapeHtml(buildListingLine(listing))}</a></li>`;
     })
     .join("\n");
 
-  const h1 = pageTitle.replace(" | طابو أخضر", "").replace(" - طابو أخضر", "");
+  const h1 = pageTitle.replace(" | أسعار ومواصفات | طابو أخضر", "").replace(" | طابو أخضر", "").replace(" - طابو أخضر", "");
+  const intro = buildIntroParagraph({ city, district, categoryDefinition, listings });
+  const seoTermsBlock = buildSeoTermsBlock({ categoryDefinition, city, district });
+  const relatedLinks = buildRelatedLinks({ city, district, categoryType });
 
   const fallbackContent = `
 <section id="seo-area-content" style="max-width:980px;margin:24px auto;padding:16px;font-family:Tajawal,Arial,sans-serif;line-height:1.9;direction:rtl">
   <h1>${escapeHtml(h1)}</h1>
+  <p>${escapeHtml(intro)}</p>
   <p>${escapeHtml(description)}</p>
   ${listingLinks ? `<h2>أحدث الإعلانات في ${escapeHtml(areaName)}</h2><ul>${listingLinks}</ul>` : ""}
+  ${seoTermsBlock}
+  ${relatedLinks}
 </section>`;
 
   const seo = `
