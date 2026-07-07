@@ -133,6 +133,7 @@ function CardMedia({
 function ListingCard({
   item,
   onPress,
+  onClick,
   favs,
   toggleFav,
   DC,
@@ -169,6 +170,7 @@ function ListingCard({
   };
 
   if (!DC) DC = C;
+  const handlePress = onPress || onClick;
 
   const isFaved = favs?.includes(Number(item.id)) || favs?.includes(String(item.id));
   const isWant = item.type === "want_buy" || item.type === "want_rent";
@@ -213,13 +215,13 @@ function ListingCard({
       event.shiftKey ||
       event.altKey;
 
-    if (!onPress || modifiedClick) return;
+    if (!handlePress || modifiedClick) return;
 
     event.preventDefault();
-    onPress(item);
+    handlePress(item);
   }
 
-  return <div onClick={() => onPress && onPress(item)} onMouseEnter={() => {
+  return <div onClick={() => handlePress?.(item)} onMouseEnter={() => {
     if (item.photo) {
       const img = new Image();
       img.src = item.photo;
